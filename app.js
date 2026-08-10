@@ -175,11 +175,14 @@
     var p = String(s).split("-");
     return p.length === 3 ? p[2] + "/" + p[1] + "/" + p[0] : s;
   }
-  function saveNote(epId, text) {
+  function saveNote(key, text) {
     if (!state.notes) state.notes = {};
-    state.notes[epId] = { text: text };
-    post("note", { key: epId, text: text }).catch(function () { toast("Sem conexão pra salvar a nota"); });
+    if (text) state.notes[key] = { text: text }; else delete state.notes[key];
+    post("note", { key: key, text: text }).catch(function () { toast("Sem conexão pra salvar a nota"); });
   }
+  function flashMini(el) { el.classList.add("just-saved"); setTimeout(function () { el.classList.remove("just-saved"); }, 1200); }
+  function topKey(epId, tp, idx) { return epId + ":" + (tp.sec != null ? tp.sec : "i" + idx); }
+
   function renderEstudo() {
     var feed = $("estudoFeed"); feed.innerHTML = "";
     var eps = ESTUDOS.episodios || [];
@@ -190,29 +193,58 @@
     eps.forEach(function (ep) {
       var sec = document.createElement("section"); sec.className = "ep";
       var temas = (ep.temas || []).map(function (t) { return '<span class="ep-tema">' + esc(t) + "</span>"; }).join("");
-      var bullets = (ep.topicos || []).map(function (tp) {
-        return '<li data-sec="' + (tp.sec || 0) + '"><span class="ts">' + esc(tp.t || "") + '</span><span class="bx">' + esc(tp.txt || "") + "</span></li>";
-      }).join("");
-      var noteVal = (state.notes && state.notes[ep.id] && state.notes[ep.id].text) || "";
+      // topicos agrupados por capitulo, com tag e anotacao em cada
+      var tops = ep.topicos || [], html = "", curCap = null;
+      tops.forEach(function (tp, idx) {
+        var cap = tp.cap || "";
+        if (cap !== curCap) {
+          if (curCap !== null) html += "</ul>";
+          curCap = cap;
+          html += '<div class="ep-cap">' + esc(cap || "Tópicos") + "</div><ul class=\"ep-bullets\">";
+        }
+        var key = topKey(ep.id, tp, idx);
+        var noteVal = (state.notes && state.notes[key] && state.notes[key].text) || "";
+        var tag = tp.tag ? '<span class="btag">' + esc(tp.tag) + "</span>" : "";
+        html +=
+          "<li>" +
+            '<div class="bl-main" data-sec="' + (tp.sec || 0) + '" title="Clique pra ouvir este trecho">' +
+              '<span class="ts">' + esc(tp.t || "") + "</span>" +
+              '<div class="bl-body"><span class="bx">' + esc(tp.txt || "") + "</span>" + tag + "</div>" +
+            "</div>" +
+            '<textarea class="bl-note" data-key="' + esc(key) + '" placeholder="✍️ anotar neste tópico…">' + esc(noteVal) + "</textarea>" +
+          "</li>";
+      });
+      if (curCap !== null) html += "</ul>";
+      if (!html) html = '<div class="ep-noaudio">Sem tópicos.</div>';
+
+      var epNoteVal = (state.notes && state.notes[ep.id] && state.notes[ep.id].text) || "";
       sec.innerHTML =
         '<div class="ep-head"><span class="ep-date">' + esc(fmtData(ep.data)) + (ep.duracao ? " · " + esc(ep.duracao) : "") + "</span>" +
           "<h2>" + esc(ep.titulo) + "</h2></div>" +
         (temas ? '<div class="ep-temas">' + temas + "</div>" : "") +
         (ep.audio_url ? '<audio class="ep-audio" controls preload="none" src="' + esc(ep.audio_url) + '"></audio>' : '<div class="ep-noaudio">Áudio não anexado.</div>') +
-        '<h3>📌 Tópicos e anotações <small>(clique no tempo pra ouvir o trecho)</small></h3>' +
-        '<ul class="ep-bullets">' + bullets + "</ul>" +
-        "<h3>📝 Minhas notas</h3>" +
-        '<textarea class="ep-notes" placeholder="Escreva o que você quer lembrar deste episódio…">' + esc(noteVal) + "</textarea>" +
+        '<h3>📌 Capítulos e tópicos <small>(clique no tempo pra ouvir; escreva sua anotação em cada tópico)</small></h3>' +
+        html +
+        "<h3>📝 Notas gerais do episódio</h3>" +
+        '<textarea class="ep-notes" placeholder="Anotações gerais deste episódio…">' + esc(epNoteVal) + "</textarea>" +
         '<div class="ep-notesaved">salvo ✓</div>' +
         (ep.transcricao ? '<details class="ep-tr"><summary>Ver transcrição completa</summary><div class="ep-tr-body">' + esc(ep.transcricao) + "</div></details>" : "");
+
       var audio = sec.querySelector(".ep-audio");
-      [].forEach.call(sec.querySelectorAll(".ep-bullets li"), function (li) {
-        li.onclick = function () { if (audio) { try { audio.currentTime = parseFloat(li.dataset.sec) || 0; audio.play(); } catch (e) {} } };
+      [].forEach.call(sec.querySelectorAll(".bl-main"), function (m) {
+        m.onclick = function () { if (audio) { try { audio.currentTime = parseFloat(m.dataset.sec) || 0; audio.play(); } catch (e) {} } };
       });
-      var ta = sec.querySelector(".ep-notes"), tmr = null, saved = sec.querySelector(".ep-notesaved");
+      [].forEach.call(sec.querySelectorAll(".bl-note"), function (na) {
+        var tmr = null;
+        na.addEventListener("input", function () {
+          clearTimeout(tmr);
+          tmr = setTimeout(function () { saveNote(na.dataset.key, na.value); flashMini(na); }, 700);
+        });
+      });
+      var ta = sec.querySelector(".ep-notes"), tmr2 = null, saved = sec.querySelector(".ep-notesaved");
       ta.addEventListener("input", function () {
-        clearTimeout(tmr);
-        tmr = setTimeout(function () {
+        clearTimeout(tmr2);
+        tmr2 = setTimeout(function () {
           saveNote(ep.id, ta.value);
           if (saved) { saved.classList.add("on"); setTimeout(function () { saved.classList.remove("on"); }, 1500); }
         }, 700);

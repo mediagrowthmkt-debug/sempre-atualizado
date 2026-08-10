@@ -443,6 +443,9 @@ def cmd_estudo(audio, payload_path, data=None, titulo=None, publicar=False):
     slug = _slugify(titulo)
     ep_id = f"{data}-{slug}"
 
+    est = load_estudos()
+    prev = next((e for e in est.get("episodios", []) if e.get("id") == ep_id), None)
+
     audio_url = ""
     if audio and os.path.exists(audio):
         ext = os.path.splitext(audio)[1].lower() or ".m4a"
@@ -454,16 +457,18 @@ def cmd_estudo(audio, payload_path, data=None, titulo=None, publicar=False):
         print(f"✅ áudio no ar: {audio_url}")
     elif audio:
         print(f"⚠️  áudio não encontrado: {audio}")
+    elif prev and prev.get("audio_url"):
+        audio_url = prev["audio_url"]  # sem --audio: mantem o que ja esta hospedado (nao re-sobe)
+        print(f"ℹ️  mantendo o áudio já hospedado: {audio_url}")
 
     ep = {
         "id": ep_id, "data": data, "titulo": titulo,
-        "audio_url": audio_url, "duracao": p.get("duracao", ""),
+        "audio_url": audio_url, "duracao": p.get("duracao") or (prev.get("duracao", "") if prev else ""),
         "temas": p.get("temas", []),
         "topicos": p.get("topicos", []),
         "transcricao": p.get("transcricao", ""),
         "criado_em": now_iso(),
     }
-    est = load_estudos()
     est["episodios"] = [e for e in est.get("episodios", []) if e.get("id") != ep_id]
     est["episodios"].insert(0, ep)
     est["episodios"].sort(key=lambda e: e.get("data", ""), reverse=True)
