@@ -14,6 +14,7 @@ Uso:
   engine.py add --file payload.json [--publicar]                   # ingere pesquisa profunda do agente
   engine.py gerar-texto [--status checked|all|novos] [--out arq]   # monta o texto em capitulos
   engine.py materias [--cat id1,id2]                               # gera materias/<id>.html (curadoria por assunto, pro NotebookLM)
+  engine.py audio-prompt [--status checked]                        # texto pro campo "Personalizar o Resumo em Áudio" do NotebookLM
   engine.py publicar [-m "msg"]                                    # git push -> GitHub Pages
   engine.py backend                                                # scp api.php -> Hostinger
   engine.py link                                                   # imprime os links
@@ -297,6 +298,36 @@ def cmd_gerar_texto(status="checked", out=None):
     print(f"\n--- {n_cap} capitulos · {len(sel)} itens ({status}) ---", file=sys.stderr)
 
 
+def cmd_audio_prompt(status="checked"):
+    """Texto pro campo 'Personalizar o Resumo em Áudio' do NotebookLM (foco dos apresentadores)."""
+    cfg = load_cfg()
+    dados = load_dados()
+    dec = backend_state() if status == "checked" else {}
+
+    def keep(it):
+        s = dec.get(it["id"], {}).get("status", "pending")
+        if status == "checked":
+            return s == "checked"
+        if status == "novos":
+            return s in ("pending", "checked")
+        return s != "read"
+
+    sel = [i for i in dados["itens"] if keep(i)]
+    if not sel:
+        print("Nenhum item selecionado (status='%s')." % status)
+        return
+    cats = [c for c in cfg["categorias"] if any(i["cat"] == c["id"] for i in sel)]
+    temas = ", ".join(f"{c['emoji']} {c['nome']}" for c in cats)
+    txt = (
+        "Este episódio é um resumo de aprendizado para mim, Bruno, dono de uma agência de marketing digital (a MediaGrowth).\n\n"
+        "Falem em português do Brasil, com tom prático, direto e envolvente, como dois especialistas conversando de igual para igual comigo. Sem introdução longa e sem definições óbvias.\n\n"
+        "Concentrem-se em: (1) o que há de novo e realmente importante em cada tema; (2) os pontos-chave que eu preciso saber; (3) principalmente COMO aplicar na prática, na agência e na minha vida. Tragam números, exemplos e o porquê de cada coisa importar, e fechem cada tema com um próximo passo concreto.\n\n"
+        "Conectem os assuntos entre si quando fizer sentido e priorizem insight acionável no lugar de teoria. Podem ser críticos e dar opinião, não só descrever.\n\n"
+        f"Os {len(sel)} assuntos deste episódio, por tema: {temas}."
+    )
+    print(txt)
+
+
 # ---------------------------------------------------------------- materias (1 pagina por assunto, pro NotebookLM)
 MATERIAS = os.path.join(REPO, "materias")
 
@@ -454,6 +485,8 @@ def main():
     elif c == "materias":
         cats = arg("--cat")
         cmd_materias(cats=[x.strip() for x in cats.split(",")] if cats else None)
+    elif c == "audio-prompt":
+        cmd_audio_prompt(status=arg("--status", "checked"))
     elif c == "publicar":
         cmd_publicar(arg("-m"))
     elif c == "backend":

@@ -208,22 +208,48 @@
     return { txt: sel.map(function (it) { return materiaURL(it.id); }).join("\n"), n: sel.length };
   }
 
-  /* ---------- modal (2 modos: links | texto) ---------- */
+  /* ---------- prompt de "Personalizar o Resumo em Áudio" (NotebookLM) ---------- */
+  function gerarAudioPrompt() {
+    var sel = DADOS.itens.filter(function (it) { return statusOf(it.id) === "checked"; });
+    var cats = CFG.categorias.filter(function (c) { return sel.some(function (it) { return it.cat === c.id; }); });
+    var temas = cats.map(function (c) { return c.emoji + " " + c.nome; }).join(", ");
+    var L = [];
+    L.push("Este episódio é um resumo de aprendizado para mim, Bruno, dono de uma agência de marketing digital (a MediaGrowth).");
+    L.push("");
+    L.push("Falem em português do Brasil, com tom prático, direto e envolvente, como dois especialistas conversando de igual para igual comigo. Sem introdução longa e sem definições óbvias.");
+    L.push("");
+    L.push("Concentrem-se em: (1) o que há de novo e realmente importante em cada tema; (2) os pontos-chave que eu preciso saber; (3) principalmente COMO aplicar na prática, na agência e na minha vida. Tragam números, exemplos e o porquê de cada coisa importar, e fechem cada tema com um próximo passo concreto.");
+    L.push("");
+    L.push("Conectem os assuntos entre si quando fizer sentido e priorizem insight acionável no lugar de teoria. Podem ser críticos e dar opinião, não só descrever.");
+    L.push("");
+    L.push("Os " + sel.length + " assuntos deste episódio, por tema: " + temas + ".");
+    return { txt: L.join("\n"), n: sel.length };
+  }
+
+  /* ---------- modal (3 modos: links | audio | texto) ---------- */
   var modalMode = "links";
   function fillModal() {
+    var title, hint, txt, saved;
     if (modalMode === "links") {
       var g = gerarLinks();
-      $("modal-title").textContent = "🔗 Links pro NotebookLM";
-      $("modal-hint").textContent = "Cada link abre a NOSSA matéria do assunto (o resumo curado, não a fonte crua). Cole estes links no NotebookLM como fontes: o podcast sai da nossa versão. Um link por linha.";
-      $("modal-txt").value = g.txt;
-      $("modal-saved").textContent = g.n + (g.n === 1 ? " link" : " links");
+      title = "🔗 Links pro NotebookLM";
+      hint = "Cada link abre a NOSSA matéria do assunto (o resumo curado, não a fonte crua). Cole estes links no NotebookLM como fontes: o podcast sai da nossa versão. Um link por linha.";
+      txt = g.txt; saved = g.n + (g.n === 1 ? " link" : " links");
+    } else if (modalMode === "audio") {
+      var a = gerarAudioPrompt();
+      title = "🎙️ Personalizar o Resumo em Áudio";
+      hint = "Cole este texto no campo 'Personalizar' do Resumo em Áudio do NotebookLM (define no que os apresentadores devem focar neste episódio).";
+      txt = a.txt; saved = a.n + " assuntos";
     } else {
       var t = gerarTexto();
-      $("modal-title").textContent = "🧠 Texto em capítulos";
-      $("modal-hint").textContent = "Os assuntos que você marcou, em capítulos. Copie e cole no Gemini/NotebookLM pedindo o resumo.";
-      $("modal-txt").value = t.txt;
-      $("modal-saved").textContent = t.cap + " capítulos · " + t.n + " itens";
+      title = "🧠 Texto em capítulos";
+      hint = "Os assuntos que você marcou, em capítulos. Copie e cole no Gemini/NotebookLM pedindo o resumo.";
+      txt = t.txt; saved = t.cap + " capítulos · " + t.n + " itens";
     }
+    $("modal-title").textContent = title;
+    $("modal-hint").textContent = hint;
+    $("modal-txt").value = txt;
+    $("modal-saved").textContent = saved;
     [].forEach.call(document.querySelectorAll(".mtab"), function (x) { x.classList.toggle("on", x.dataset.m === modalMode); });
   }
   function openModal(mode) {
@@ -237,7 +263,9 @@
 
   function copiar() {
     var ta = $("modal-txt"); ta.select(); ta.setSelectionRange(0, 999999);
-    var msg = modalMode === "links" ? "copiado ✓ — cole os links no NotebookLM" : "copiado ✓ — cole no Gemini/NotebookLM";
+    var msg = modalMode === "links" ? "copiado ✓ · cole os links no NotebookLM"
+            : modalMode === "audio" ? "copiado ✓ · cole em Personalizar o Resumo em Áudio"
+            : "copiado ✓ · cole no Gemini/NotebookLM";
     var done = function () { $("modal-saved").textContent = msg; toast("Copiado ✓"); };
     if (navigator.clipboard) navigator.clipboard.writeText(ta.value).then(done, function () { document.execCommand("copy"); done(); });
     else { document.execCommand("copy"); done(); }
