@@ -43,7 +43,9 @@
   function setStatus(id, status) {
     if (status === "pending") delete state.decisions[id];
     else state.decisions[id] = { status: status };
-    post("mark", { id: id, status: status }).catch(function () { toast("Não consegui salvar. Verifique a conexão."); });
+    post("mark", { id: id, status: status })
+      .then(function () { if (status !== "read") toast(status === "checked" ? "Selecionado, salvo ✓" : "Desmarcado, salvo ✓"); })
+      .catch(function () { toast("Não consegui salvar. Verifique a conexão."); });
   }
 
   /* ---------- filtros ---------- */
