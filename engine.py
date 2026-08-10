@@ -13,6 +13,7 @@ Uso:
   engine.py coletar [--cat id1,id2] [--por-query N] [--publicar]   # RSS backbone (append + dedupe)
   engine.py add --file payload.json [--publicar]                   # ingere pesquisa profunda do agente
   engine.py gerar-texto [--status checked|all|novos] [--out arq]   # monta o texto em capitulos
+  engine.py materias [--cat id1,id2]                               # gera materias/<id>.html (curadoria por assunto, pro NotebookLM)
   engine.py publicar [-m "msg"]                                    # git push -> GitHub Pages
   engine.py backend                                                # scp api.php -> Hostinger
   engine.py link                                                   # imprime os links
@@ -296,8 +297,94 @@ def cmd_gerar_texto(status="checked", out=None):
     print(f"\n--- {n_cap} capitulos · {len(sel)} itens ({status}) ---", file=sys.stderr)
 
 
+# ---------------------------------------------------------------- materias (1 pagina por assunto, pro NotebookLM)
+MATERIAS = os.path.join(REPO, "materias")
+
+
+def _esc(s):
+    return (str(s if s is not None else "")
+            .replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+            .replace('"', "&quot;"))
+
+
+def materia_html(it, cfg):
+    """Pagina-materia auto-contida: a NOSSA curadoria do assunto (nao a fonte crua).
+       O NotebookLM le ESTE texto, entao o podcast sai da nossa versao."""
+    c = next((x for x in cfg["categorias"] if x["id"] == it["cat"]), {})
+    catnome = (c.get("emoji", "") + " " + c.get("nome", "")).strip() or it["cat"]
+    titulo = it.get("titulo", "Assunto")
+    resumo = it.get("resumo", "").strip()
+    porque = it.get("porque", "").strip()
+    fonte = it.get("fonte", "").strip()
+    url = it.get("url", "").strip()
+    data = it.get("data", "").strip()
+    desc = c.get("desc", "").strip()
+
+    corpo = []
+    corpo.append(f'<p class="lead">{_esc(resumo) if resumo else _esc(titulo)}</p>')
+    if porque:
+        corpo.append('<h2>Por que isso importa</h2>')
+        corpo.append(f'<p>{_esc(porque)}</p>')
+    corpo.append('<h2>Contexto do tema</h2>')
+    corpo.append(f'<p>Este material faz parte do acompanhamento sobre <b>{_esc(catnome)}</b>. '
+                 f'{_esc(desc)}</p>')
+    src = ""
+    if url:
+        src = (f'<p class="src">Referencia original: <a href="{_esc(url)}" '
+               f'target="_blank" rel="noopener">{_esc(fonte or url)}</a>'
+               + (f' · {_esc(data)}' if data else '') + '</p>')
+
+    return f"""<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<meta name="description" content="{_esc(resumo[:180] if resumo else titulo)}">
+<title>{_esc(titulo)}</title>
+<style>
+  body{{font-family:Georgia,'Times New Roman',serif;max-width:720px;margin:0 auto;padding:32px 22px 60px;color:#1a1a1a;line-height:1.65;font-size:18px}}
+  .kicker{{font-family:system-ui,Arial,sans-serif;font-size:12px;letter-spacing:.8px;text-transform:uppercase;color:#0f766e;font-weight:700;margin:0 0 6px}}
+  h1{{font-size:30px;line-height:1.2;margin:0 0 6px}}
+  .meta{{font-family:system-ui,Arial,sans-serif;font-size:13px;color:#6b7280;margin:0 0 22px;border-bottom:1px solid #e5e7eb;padding-bottom:14px}}
+  .lead{{font-size:20px;font-weight:600}}
+  h2{{font-family:system-ui,Arial,sans-serif;font-size:16px;margin:26px 0 6px;color:#111}}
+  .src{{font-family:system-ui,Arial,sans-serif;font-size:13px;color:#6b7280;margin-top:30px;border-top:1px solid #e5e7eb;padding-top:14px}}
+  a{{color:#0f766e}}
+</style>
+</head>
+<body>
+  <p class="kicker">{_esc(catnome)}</p>
+  <h1>{_esc(titulo)}</h1>
+  <div class="meta">Material de estudo{(' · ' + _esc(data)) if data else ''}{(' · Fonte: ' + _esc(fonte)) if fonte else ''}</div>
+  {''.join(corpo)}
+  {src}
+</body>
+</html>
+"""
+
+
+def cmd_materias(cats=None):
+    """Regenera materias/<id>.html pra todo item (ou so das categorias em cats)."""
+    cfg = load_cfg()
+    dados = load_dados()
+    os.makedirs(MATERIAS, exist_ok=True)
+    n = 0
+    ids_atuais = set()
+    for it in dados["itens"]:
+        if cats and it["cat"] not in cats:
+            continue
+        ids_atuais.add(it["id"])
+        path = os.path.join(MATERIAS, it["id"] + ".html")
+        open(path, "w", encoding="utf-8").write(materia_html(it, cfg))
+        n += 1
+    print(f"✅ Materias geradas: {n} paginas em materias/")
+    return n
+
+
 # ---------------------------------------------------------------- publicar / backend / status
 def cmd_publicar(msg=None):
+    cmd_materias()  # sempre regenera as paginas-materia antes de publicar
     git(["add", "-A"])
     r = subprocess.run(["git", "status", "--porcelain"], cwd=REPO, capture_output=True, text=True)
     if not r.stdout.strip():
@@ -364,6 +451,9 @@ def main():
         cmd_add(arg("--file"), publicar="--publicar" in a)
     elif c == "gerar-texto":
         cmd_gerar_texto(status=arg("--status", "checked"), out=arg("--out"))
+    elif c == "materias":
+        cats = arg("--cat")
+        cmd_materias(cats=[x.strip() for x in cats.split(",")] if cats else None)
     elif c == "publicar":
         cmd_publicar(arg("-m"))
     elif c == "backend":

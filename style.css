@@ -93,6 +93,12 @@ a:hover{text-decoration:underline}
 .ab-count{font-weight:800;font-size:14px;color:#374151}
 .btn-gerar{background:linear-gradient(135deg,var(--accent),#059669);color:#fff;border:0;border-radius:12px;padding:12px 22px;font:inherit;font-weight:800;font-size:15px;cursor:pointer;box-shadow:0 4px 14px rgba(16,185,129,.35)}
 .btn-gerar:disabled{background:#cbd5e1;box-shadow:none;cursor:not-allowed}
+.ab-btns{display:flex;gap:9px;align-items:center}
+.btn-links{background:linear-gradient(135deg,var(--accent2),#4338ca);color:#fff;border:0;border-radius:12px;padding:12px 20px;font:inherit;font-weight:800;font-size:15px;cursor:pointer;box-shadow:0 4px 14px rgba(99,102,241,.35)}
+.btn-links:disabled{background:#cbd5e1;box-shadow:none;cursor:not-allowed}
+.modal-tabs{display:flex;gap:6px;margin:12px 0 4px}
+.mtab{flex:1;border:1.5px solid var(--line);background:#fff;color:#374151;border-radius:10px;padding:9px 10px;font:inherit;font-weight:700;font-size:13px;cursor:pointer}
+.mtab.on{background:var(--ink);color:#fff;border-color:var(--ink)}
 
 /* modal */
 .modal{display:none;position:fixed;inset:0;z-index:60;background:rgba(10,14,24,.55);align-items:center;justify-content:center;padding:16px}
@@ -124,4 +130,8 @@ a:hover{text-decoration:underline}
   .hero-in{gap:12px}
   .hero h1{font-size:22px}
   .stats{gap:9px}
+  .ab-in{flex-wrap:wrap;gap:8px}
+  .ab-btns{width:100%;gap:8px}
+  .btn-links,.btn-gerar{flex:1;padding:12px 8px;font-size:13.5px}
+  .ab-count{font-size:13px}
 }

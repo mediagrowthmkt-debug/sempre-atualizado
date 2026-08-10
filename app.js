@@ -198,18 +198,47 @@
     return { txt: L.join("\n").replace(/\n{3,}/g, "\n\n").trim() + "\n", cap: cap, n: sel.length };
   }
 
-  function openModal() {
-    var g = gerarTexto();
-    if (!g.n) { toast("Marque assuntos primeiro ✅"); return; }
-    $("modal-txt").value = g.txt;
-    $("modal-saved").textContent = g.cap + " capítulos · " + g.n + " itens";
+  /* ---------- links pro NotebookLM (materias hospedadas) ---------- */
+  function materiaURL(id) {
+    // materias/<id>.html fica ao lado do index (mesma pasta no GitHub Pages)
+    return new URL("materias/" + id + ".html", location.href).href;
+  }
+  function gerarLinks() {
+    var sel = DADOS.itens.filter(function (it) { return statusOf(it.id) === "checked"; });
+    return { txt: sel.map(function (it) { return materiaURL(it.id); }).join("\n"), n: sel.length };
+  }
+
+  /* ---------- modal (2 modos: links | texto) ---------- */
+  var modalMode = "links";
+  function fillModal() {
+    if (modalMode === "links") {
+      var g = gerarLinks();
+      $("modal-title").textContent = "🔗 Links pro NotebookLM";
+      $("modal-hint").textContent = "Cada link abre a NOSSA matéria do assunto (o resumo curado, não a fonte crua). Cole estes links no NotebookLM como fontes: o podcast sai da nossa versão. Um link por linha.";
+      $("modal-txt").value = g.txt;
+      $("modal-saved").textContent = g.n + (g.n === 1 ? " link" : " links");
+    } else {
+      var t = gerarTexto();
+      $("modal-title").textContent = "🧠 Texto em capítulos";
+      $("modal-hint").textContent = "Os assuntos que você marcou, em capítulos. Copie e cole no Gemini/NotebookLM pedindo o resumo.";
+      $("modal-txt").value = t.txt;
+      $("modal-saved").textContent = t.cap + " capítulos · " + t.n + " itens";
+    }
+    [].forEach.call(document.querySelectorAll(".mtab"), function (x) { x.classList.toggle("on", x.dataset.m === modalMode); });
+  }
+  function openModal(mode) {
+    var n = DADOS.itens.filter(function (it) { return statusOf(it.id) === "checked"; }).length;
+    if (!n) { toast("Marque assuntos primeiro ✅"); return; }
+    modalMode = mode || "links";
+    fillModal();
     $("modal").classList.add("on");
   }
   function closeModal() { $("modal").classList.remove("on"); }
 
   function copiar() {
     var ta = $("modal-txt"); ta.select(); ta.setSelectionRange(0, 999999);
-    var done = function () { $("modal-saved").textContent = "copiado ✓ — cole no Gemini/NotebookLM"; toast("Copiado ✓"); };
+    var msg = modalMode === "links" ? "copiado ✓ — cole os links no NotebookLM" : "copiado ✓ — cole no Gemini/NotebookLM";
+    var done = function () { $("modal-saved").textContent = msg; toast("Copiado ✓"); };
     if (navigator.clipboard) navigator.clipboard.writeText(ta.value).then(done, function () { document.execCommand("copy"); done(); });
     else { document.execCommand("copy"); done(); }
   }
@@ -240,10 +269,14 @@
       render();
     });
     $("busca").addEventListener("input", function (e) { q = e.target.value.trim().toLowerCase(); render(); });
-    $("btn-gerar").onclick = openModal;
+    $("btn-links").onclick = function () { openModal("links"); };
+    $("btn-gerar").onclick = function () { openModal("texto"); };
     $("modal-close").onclick = closeModal;
     $("btn-copiar").onclick = copiar;
     $("btn-arquivar").onclick = arquivarSelecionados;
+    [].forEach.call(document.querySelectorAll(".mtab"), function (t) {
+      t.onclick = function () { modalMode = t.dataset.m; fillModal(); };
+    });
     $("modal").addEventListener("click", function (e) { if (e.target.id === "modal") closeModal(); });
     $("side-toggle").onclick = openSide;
     $("side-close").onclick = closeSide;

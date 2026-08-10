@@ -60,21 +60,28 @@
 <div class="actionbar" id="actionbar">
   <div class="wrap ab-in">
     <span class="ab-count" id="ab-count">0 selecionados</span>
-    <button id="btn-gerar" class="btn-gerar">🧠 Gerar texto pra copiar</button>
+    <div class="ab-btns">
+      <button id="btn-links" class="btn-links">🔗 Links pro NotebookLM</button>
+      <button id="btn-gerar" class="btn-gerar">🧠 Gerar texto</button>
+    </div>
   </div>
 </div>
 
-<!-- modal do texto -->
+<!-- modal -->
 <div class="modal" id="modal">
   <div class="modal-card">
     <div class="modal-head">
-      <b>🧠 Texto em capítulos — cole no Gemini / NotebookLM</b>
+      <b id="modal-title">🔗 Links pro NotebookLM</b>
       <button id="modal-close" title="Fechar">✕</button>
     </div>
-    <p class="modal-hint">Selecionei os assuntos que você marcou, organizados por tema. Copie e peça o resumo.</p>
+    <div class="modal-tabs">
+      <button class="mtab on" data-m="links">🔗 Links (NotebookLM)</button>
+      <button class="mtab" data-m="texto">📄 Texto em capítulos</button>
+    </div>
+    <p class="modal-hint" id="modal-hint"></p>
     <textarea id="modal-txt" readonly></textarea>
     <div class="modal-actions">
-      <button id="btn-copiar" class="btn-copiar">📋 Copiar texto</button>
+      <button id="btn-copiar" class="btn-copiar">📋 Copiar</button>
       <button id="btn-arquivar" class="btn-arquivar">📁 Marcar selecionados como lidos</button>
       <span class="modal-saved" id="modal-saved"></span>
     </div>
