@@ -1,0 +1,143 @@
+{
+  "titulo": "Sempre Atualizado",
+  "subtitulo": "Radar de aprendizado do Bruno — assuntos novos por tema, todo dia",
+  "usuario": "bruno",
+  "grupos": [
+    { "id": "negocios", "nome": "Empresa & Negócios", "emoji": "🏢" },
+    { "id": "pessoal", "nome": "Pessoal & Desenvolvimento", "emoji": "🌱" }
+  ],
+  "categorias": [
+    {
+      "id": "empresa", "emoji": "🏢", "nome": "Empresa", "grupo": "negocios", "lang": "pt",
+      "desc": "Crescer como empresário, liderança, gestão de agência de marketing, negócios em geral.",
+      "queries": ["gestão de agência de marketing crescimento", "dicas para empresários liderança", "marketing agency growth tips", "como escalar agência de marketing digital"]
+    },
+    {
+      "id": "time", "emoji": "👥", "nome": "Time", "grupo": "negocios", "lang": "pt",
+      "desc": "Como gerenciar equipe, cultura, produtividade, gestão de pessoas.",
+      "queries": ["como gerenciar equipe alta performance", "gestão de time cultura produtividade", "team management leadership tips", "como liderar equipe remota"]
+    },
+    {
+      "id": "clientes", "emoji": "🧑‍💼", "nome": "Clientes", "grupo": "negocios", "lang": "pt",
+      "desc": "Ter clientes satisfeitos, retenção, customer success, experiência do cliente.",
+      "queries": ["como manter clientes satisfeitos retenção", "customer success agência", "client retention strategies agency", "experiência do cliente fidelização"]
+    },
+    {
+      "id": "vendas", "emoji": "💰", "nome": "Vendas", "grupo": "negocios", "lang": "pt",
+      "desc": "Técnicas de vendas, fechamento, objeções, prospecção B2B.",
+      "queries": ["técnicas de vendas fechamento", "como vender mais objeções", "B2B sales closing techniques", "prospecção e follow-up de vendas"]
+    },
+    {
+      "id": "financeiro", "emoji": "🌑", "nome": "Financeiro", "grupo": "negocios", "lang": "pt",
+      "desc": "Gestão financeira da empresa, fluxo de caixa, precificação, margem, lucro.",
+      "queries": ["gestão financeira empresarial fluxo de caixa", "precificação e margem de lucro serviços", "small business cash flow management", "como aumentar a lucratividade da empresa"]
+    },
+    {
+      "id": "bsc", "emoji": "📊", "nome": "BSC / Gestão", "grupo": "negocios", "lang": "pt",
+      "desc": "Balanced Scorecard, gestão estratégica, KPIs, OKRs, indicadores.",
+      "queries": ["balanced scorecard gestão estratégica", "OKR KPI indicadores de gestão", "strategic management scorecard", "como medir performance da empresa indicadores"]
+    },
+    {
+      "id": "ia", "emoji": "🤖", "nome": "IA / Ferramentas", "grupo": "negocios", "lang": "en",
+      "desc": "Novidades de IA, ferramentas, técnicas, agentes, automação com IA.",
+      "queries": ["new AI tools this week", "AI agents automation news", "novidades inteligência artificial ferramentas", "best AI tools for marketing agencies"]
+    },
+    {
+      "id": "ghl", "emoji": "📅", "nome": "GHL — GoHighLevel", "grupo": "negocios", "lang": "en",
+      "desc": "Novidades do CRM GoHighLevel. Fonte oficial: https://ideas.gohighlevel.com/changelog",
+      "changelog_url": "https://ideas.gohighlevel.com/changelog",
+      "queries": ["GoHighLevel new features update", "GoHighLevel changelog release", "GoHighLevel novidades CRM"]
+    },
+    {
+      "id": "contractors", "emoji": "🇺🇸", "nome": "Mkt Contractors USA", "grupo": "negocios", "lang": "en",
+      "desc": "Marketing para empresas de construção / contractors nos EUA.",
+      "queries": ["contractor marketing tips USA", "home services marketing construction leads", "marketing for construction companies USA", "roofing HVAC contractor lead generation"]
+    },
+    {
+      "id": "instagram_mg", "emoji": "📲", "nome": "Instagram (Agência)", "grupo": "negocios", "lang": "pt",
+      "desc": "Ideias de marketing para o Instagram da própria agência de marketing.",
+      "queries": ["marketing agency instagram content ideas", "instagram para agência de marketing ideias", "reels virais agência de marketing", "instagram growth strategy agency"]
+    },
+
+    {
+      "id": "oratoria", "emoji": "💼", "nome": "Oratória", "grupo": "pessoal", "lang": "pt",
+      "desc": "Falar em público, comunicação, storytelling, presença de palco.",
+      "queries": ["técnicas de oratória falar em público", "public speaking storytelling tips", "como melhorar comunicação e apresentação", "presença de palco vencer o medo de falar"]
+    },
+    {
+      "id": "noporn", "emoji": "🔞", "nome": "No Porn / Dopamina", "grupo": "pessoal", "lang": "en",
+      "desc": "Parar com pornografia, controle de dopamina, foco, disciplina, hábitos.",
+      "queries": ["quitting porn benefits nofap science", "dopamine detox focus discipline", "como parar com pornografia disciplina", "rewire brain dopamine addiction habits"]
+    },
+    {
+      "id": "meditacao", "emoji": "🧘", "nome": "Meditação / Universo", "grupo": "pessoal", "lang": "pt",
+      "desc": "Meditação, energia, leis do universo, subconsciente, manifestação, espiritualidade.",
+      "queries": ["meditação e reprogramação do subconsciente", "leis do universo manifestação energia", "meditation subconscious mind manifestation", "como acalmar a mente e elevar a energia"]
+    },
+    {
+      "id": "networking", "emoji": "🗣️", "nome": "Networking Down & Up", "grupo": "pessoal", "lang": "pt",
+      "desc": "Como fazer networking, criar relações estratégicas, subir e descer na rede.",
+      "queries": ["como fazer networking estratégico", "networking build relationships up and down", "como criar conexões profissionais poderosas", "networking tips introverts"]
+    },
+    {
+      "id": "programacao", "emoji": "💻", "nome": "Programação / Cyber", "grupo": "pessoal", "lang": "en",
+      "desc": "Programação e cibersegurança — novidades, técnicas, boas práticas.",
+      "queries": ["cybersecurity news this week", "programming tips best practices", "novidades programação segurança", "web app security vulnerabilities"]
+    },
+    {
+      "id": "mais_dinheiro", "emoji": "🤑", "nome": "Mais Dinheiro", "grupo": "pessoal", "lang": "pt",
+      "desc": "Como ter mais dinheiro, renda extra, mentalidade de riqueza, novos fluxos.",
+      "queries": ["como ter mais dinheiro renda extra", "how to make more money side income", "mentalidade de riqueza fluxos de renda", "novas formas de ganhar dinheiro online"]
+    },
+    {
+      "id": "oracao", "emoji": "✝️", "nome": "Oração / Palavra de Deus", "grupo": "pessoal", "lang": "pt",
+      "desc": "Devocional, palavra de Deus, fé, oração, versículos e reflexões cristãs.",
+      "queries": ["devocional palavra de Deus reflexão", "versículo do dia fé cristã", "oração e fé reflexão diária", "estudo bíblico propósito de vida"]
+    },
+    {
+      "id": "investimentos", "emoji": "💵", "nome": "Investimentos", "grupo": "pessoal", "lang": "pt",
+      "desc": "Tudo sobre investimentos — bolsa, renda fixa, cripto, fundos, estratégia.",
+      "queries": ["investimentos estratégia renda fixa e variável", "onde investir dinheiro melhor rendimento", "investing strategy stocks crypto", "notícias mercado financeiro investimentos"]
+    },
+    {
+      "id": "ler", "emoji": "📚", "nome": "Ler / Livros", "grupo": "pessoal", "lang": "pt",
+      "desc": "Resumos e insights de livros que fazem sentido pra mim, recomendações.",
+      "queries": ["resumo de livros de negócios e desenvolvimento pessoal", "book summary key insights business", "melhores livros para empreendedores insights", "livro recomendado liderança produtividade resumo"]
+    },
+    {
+      "id": "conexoes", "emoji": "❤️", "nome": "Conexões / Amizades", "grupo": "pessoal", "lang": "pt",
+      "desc": "Como se conectar com pessoas, amizades, relações profundas, carisma.",
+      "queries": ["como se conectar com as pessoas carisma", "how to build deep friendships connection", "habilidades sociais criar vínculo", "como ser mais interessante e presente"]
+    },
+    {
+      "id": "video", "emoji": "📹", "nome": "Criar / Editar Vídeo", "grupo": "pessoal", "lang": "pt",
+      "desc": "Criar, editar e publicar vídeo — técnicas, edição, reels, ferramentas.",
+      "queries": ["dicas de edição de vídeo reels", "video editing techniques tips", "como fazer reels que viralizam edição", "ferramentas de edição de vídeo novidades"]
+    },
+    {
+      "id": "ads", "emoji": "🎯", "nome": "Ads / Marketing", "grupo": "pessoal", "lang": "en",
+      "desc": "Tudo sobre marketing e anúncios pagos — Meta Ads, Google Ads, criativos.",
+      "queries": ["meta ads google ads news strategy", "paid ads creative tips this week", "novidades meta ads google ads", "performance marketing best practices"]
+    },
+    {
+      "id": "biohacking", "emoji": "🧬", "nome": "Biohacking", "grupo": "pessoal", "lang": "en",
+      "desc": "Biohacking, otimização do corpo, energia, sono, longevidade, foco.",
+      "queries": ["biohacking energy sleep longevity", "biohacking tips focus performance", "otimização do corpo energia sono", "longevity health optimization science"]
+    },
+    {
+      "id": "abdomen", "emoji": "🏃", "nome": "Abdômen Definido", "grupo": "pessoal", "lang": "en",
+      "desc": "Dicas para abdômen definido, core, redução de gordura abdominal.",
+      "queries": ["how to get defined abs core", "abs definition lower belly fat tips", "dicas abdômen definido treino e dieta", "core training visible abs"]
+    },
+    {
+      "id": "academia", "emoji": "💪", "nome": "Academia", "grupo": "pessoal", "lang": "en",
+      "desc": "Dicas de academia, hipertrofia, treino, força, recuperação.",
+      "queries": ["gym hypertrophy training tips", "muscle building workout science", "dicas de treino hipertrofia academia", "strength training recovery best practices"]
+    },
+    {
+      "id": "walk", "emoji": "🚶", "nome": "Walk / Reflexão", "grupo": "pessoal", "lang": "pt",
+      "desc": "Caminhada como reflexão, clareza mental, benefícios de caminhar.",
+      "queries": ["benefícios da caminhada clareza mental", "walking meditation reflection benefits", "caminhada e produtividade reflexão", "walking for creativity mental health"]
+    }
+  ]
+}

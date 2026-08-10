@@ -1,0 +1,5 @@
+.DS_Store
+api/data/
+*.bak.*
+.sa-tmp-*.json
+_scratch/
