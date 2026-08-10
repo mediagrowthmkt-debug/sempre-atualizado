@@ -26,6 +26,14 @@
   </div>
 </header>
 
+<nav class="modeswitch">
+  <div class="wrap ms-in">
+    <button class="mode-btn on" data-mode="radar">✨ Radar de assuntos</button>
+    <button class="mode-btn" data-mode="estudo">📻 Estudo do podcast</button>
+  </div>
+</nav>
+
+<div id="radarView">
 <nav class="toolbar">
   <div class="wrap tb-in">
     <input id="busca" class="busca" type="search" placeholder="🔎 buscar assunto…" autocomplete="off">
@@ -55,6 +63,13 @@
 
 <button id="side-toggle" class="side-toggle">📑 Categorias</button>
 <div id="side-backdrop" class="side-backdrop"></div>
+</div><!-- /radarView -->
+
+<div id="estudoView" class="estudo-view" style="display:none">
+  <div class="wrap">
+    <div id="estudoFeed" class="estudo-feed"><div class="loading">Carregando os episódios…</div></div>
+  </div>
+</div>
 
 <!-- barra flutuante de acao -->
 <div class="actionbar" id="actionbar">

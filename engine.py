@@ -15,6 +15,7 @@ Uso:
   engine.py gerar-texto [--status checked|all|novos] [--out arq]   # monta o texto em capitulos
   engine.py materias [--cat id1,id2]                               # gera materias/<id>.html (curadoria por assunto, pro NotebookLM)
   engine.py audio-prompt [--status checked]                        # texto pro campo "Personalizar o Resumo em Áudio" do NotebookLM
+  engine.py estudo --audio arq.m4a --file payload.json [--data YYYY-MM-DD] [--titulo "..."] [--publicar]  # cria o estudo do podcast (hospeda audio + topicos com timestamp)
   engine.py publicar [-m "msg"]                                    # git push -> GitHub Pages
   engine.py backend                                                # scp api.php -> Hostinger
   engine.py link                                                   # imprime os links
@@ -413,6 +414,66 @@ def cmd_materias(cats=None):
     return n
 
 
+# ---------------------------------------------------------------- estudo do podcast
+ESTUDOS = os.path.join(REPO, "dados", "estudos.json")
+AUDIO_REMOTE = os.environ.get("SA_AUDIO_DIR", "domains/mediagrowth.com.br/public_html/atualizado-audio")
+AUDIO_URL = os.environ.get("SA_AUDIO_URL", "https://mediagrowth.com.br/atualizado-audio")
+
+
+def load_estudos():
+    if os.path.exists(ESTUDOS):
+        try:
+            return json.load(open(ESTUDOS, encoding="utf-8"))
+        except Exception:
+            pass
+    return {"episodios": []}
+
+
+def _slugify(s):
+    s = re.sub(r"[^a-zA-Z0-9]+", "-", (s or "").strip().lower()).strip("-")
+    return s[:60] or "episodio"
+
+
+def cmd_estudo(audio, payload_path, data=None, titulo=None, publicar=False):
+    """Cria/atualiza um episodio de estudo: hospeda o audio, grava topicos+transcricao, publica.
+       payload.json: { titulo?, temas?[], duracao?, topicos:[{t,sec,txt}], transcricao? }"""
+    p = json.load(open(payload_path, encoding="utf-8"))
+    data = data or today()
+    titulo = titulo or p.get("titulo") or "Episódio"
+    slug = _slugify(titulo)
+    ep_id = f"{data}-{slug}"
+
+    audio_url = ""
+    if audio and os.path.exists(audio):
+        ext = os.path.splitext(audio)[1].lower() or ".m4a"
+        fname = f"{ep_id}{ext}"
+        sh(["ssh", "-o", "ConnectTimeout=20", SSH, f"mkdir -p {AUDIO_REMOTE} && echo OK"])
+        print(f"⬆️  subindo áudio pra Hostinger ({os.path.getsize(audio)//1024//1024} MB)…")
+        sh(["scp", "-o", "ConnectTimeout=60", audio, f"{SSH}:{AUDIO_REMOTE}/{fname}"])
+        audio_url = f"{AUDIO_URL}/{fname}"
+        print(f"✅ áudio no ar: {audio_url}")
+    elif audio:
+        print(f"⚠️  áudio não encontrado: {audio}")
+
+    ep = {
+        "id": ep_id, "data": data, "titulo": titulo,
+        "audio_url": audio_url, "duracao": p.get("duracao", ""),
+        "temas": p.get("temas", []),
+        "topicos": p.get("topicos", []),
+        "transcricao": p.get("transcricao", ""),
+        "criado_em": now_iso(),
+    }
+    est = load_estudos()
+    est["episodios"] = [e for e in est.get("episodios", []) if e.get("id") != ep_id]
+    est["episodios"].insert(0, ep)
+    est["episodios"].sort(key=lambda e: e.get("data", ""), reverse=True)
+    os.makedirs(os.path.dirname(ESTUDOS), exist_ok=True)
+    json.dump(est, open(ESTUDOS, "w", encoding="utf-8"), ensure_ascii=False, indent=2)
+    print(f"✅ Episódio '{titulo}' ({data}) gravado: {len(ep['topicos'])} tópicos.")
+    if publicar:
+        cmd_publicar(f"estudo: {titulo} ({data})")
+
+
 # ---------------------------------------------------------------- publicar / backend / status
 def cmd_publicar(msg=None):
     cmd_materias()  # sempre regenera as paginas-materia antes de publicar
@@ -487,6 +548,9 @@ def main():
         cmd_materias(cats=[x.strip() for x in cats.split(",")] if cats else None)
     elif c == "audio-prompt":
         cmd_audio_prompt(status=arg("--status", "checked"))
+    elif c == "estudo":
+        cmd_estudo(arg("--audio"), arg("--file"), data=arg("--data"),
+                   titulo=arg("--titulo"), publicar="--publicar" in a)
     elif c == "publicar":
         cmd_publicar(arg("-m"))
     elif c == "backend":

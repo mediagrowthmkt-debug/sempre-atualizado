@@ -8,8 +8,9 @@
   var params = new URLSearchParams(location.search);
   var SLUG = (params.get("u") || params.get("slug") || "bruno").toLowerCase().replace(/[^a-z0-9\-]/g, "");
 
-  var CFG = null, DADOS = null;
-  var state = { decisions: {} };
+  var CFG = null, DADOS = null, ESTUDOS = { episodios: [] };
+  var state = { decisions: {}, notes: {} };
+  var appMode = "radar";   // radar | estudo
   var view = "novos";      // novos | sel | todos | lidos
   var group = "all";       // all | negocios | pessoal
   var q = "";
@@ -166,6 +167,68 @@
     });
   }
 
+  /* ---------- estudo do podcast ---------- */
+  function fmtData(s) {
+    if (!s) return "";
+    var p = String(s).split("-");
+    return p.length === 3 ? p[2] + "/" + p[1] + "/" + p[0] : s;
+  }
+  function saveNote(epId, text) {
+    if (!state.notes) state.notes = {};
+    state.notes[epId] = { text: text };
+    post("note", { key: epId, text: text }).catch(function () { toast("Sem conexão pra salvar a nota"); });
+  }
+  function renderEstudo() {
+    var feed = $("estudoFeed"); feed.innerHTML = "";
+    var eps = ESTUDOS.episodios || [];
+    if (!eps.length) {
+      feed.innerHTML = '<div class="empty"><b>Nenhum podcast de estudo ainda.</b>Gere o Resumo em Áudio no NotebookLM e me mande o arquivo. Eu transcrevo, monto os tópicos com o tempo e crio o estudo aqui.</div>';
+      return;
+    }
+    eps.forEach(function (ep) {
+      var sec = document.createElement("section"); sec.className = "ep";
+      var temas = (ep.temas || []).map(function (t) { return '<span class="ep-tema">' + esc(t) + "</span>"; }).join("");
+      var bullets = (ep.topicos || []).map(function (tp) {
+        return '<li data-sec="' + (tp.sec || 0) + '"><span class="ts">' + esc(tp.t || "") + '</span><span class="bx">' + esc(tp.txt || "") + "</span></li>";
+      }).join("");
+      var noteVal = (state.notes && state.notes[ep.id] && state.notes[ep.id].text) || "";
+      sec.innerHTML =
+        '<div class="ep-head"><span class="ep-date">' + esc(fmtData(ep.data)) + (ep.duracao ? " · " + esc(ep.duracao) : "") + "</span>" +
+          "<h2>" + esc(ep.titulo) + "</h2></div>" +
+        (temas ? '<div class="ep-temas">' + temas + "</div>" : "") +
+        (ep.audio_url ? '<audio class="ep-audio" controls preload="none" src="' + esc(ep.audio_url) + '"></audio>' : '<div class="ep-noaudio">Áudio não anexado.</div>') +
+        '<h3>📌 Tópicos e anotações <small>(clique no tempo pra ouvir o trecho)</small></h3>' +
+        '<ul class="ep-bullets">' + bullets + "</ul>" +
+        "<h3>📝 Minhas notas</h3>" +
+        '<textarea class="ep-notes" placeholder="Escreva o que você quer lembrar deste episódio…">' + esc(noteVal) + "</textarea>" +
+        '<div class="ep-notesaved">salvo ✓</div>' +
+        (ep.transcricao ? '<details class="ep-tr"><summary>Ver transcrição completa</summary><div class="ep-tr-body">' + esc(ep.transcricao) + "</div></details>" : "");
+      var audio = sec.querySelector(".ep-audio");
+      [].forEach.call(sec.querySelectorAll(".ep-bullets li"), function (li) {
+        li.onclick = function () { if (audio) { try { audio.currentTime = parseFloat(li.dataset.sec) || 0; audio.play(); } catch (e) {} } };
+      });
+      var ta = sec.querySelector(".ep-notes"), tmr = null, saved = sec.querySelector(".ep-notesaved");
+      ta.addEventListener("input", function () {
+        clearTimeout(tmr);
+        tmr = setTimeout(function () {
+          saveNote(ep.id, ta.value);
+          if (saved) { saved.classList.add("on"); setTimeout(function () { saved.classList.remove("on"); }, 1500); }
+        }, 700);
+      });
+      feed.appendChild(sec);
+    });
+  }
+  function setMode(m) {
+    appMode = m;
+    $("radarView").style.display = (m === "radar") ? "" : "none";
+    $("estudoView").style.display = (m === "estudo") ? "" : "none";
+    $("actionbar").style.display = (m === "radar") ? "" : "none";
+    var stog = $("side-toggle"); if (stog) stog.style.display = (m === "radar") ? "" : "none";
+    [].forEach.call(document.querySelectorAll(".mode-btn"), function (b) { b.classList.toggle("on", b.dataset.mode === m); });
+    if (m === "estudo") renderEstudo();
+    window.scrollTo(0, 0);
+  }
+
   /* ---------- gerar texto em capitulos ---------- */
   function gerarTexto() {
     var sel = DADOS.itens.filter(function (it) { return statusOf(it.id) === "checked"; });
@@ -297,6 +360,7 @@
       render();
     });
     $("busca").addEventListener("input", function (e) { q = e.target.value.trim().toLowerCase(); render(); });
+    [].forEach.call(document.querySelectorAll(".mode-btn"), function (b) { b.onclick = function () { setMode(b.dataset.mode); }; });
     $("btn-links").onclick = function () { openModal("links"); };
     $("btn-gerar").onclick = function () { openModal("texto"); };
     $("modal-close").onclick = closeModal;
@@ -316,15 +380,19 @@
   Promise.all([
     fetch("categorias.json", { cache: "no-store" }).then(function (r) { return r.json(); }),
     fetch("dados/" + SLUG + ".json", { cache: "no-store" }).then(function (r) { return r.json(); }).catch(function () { return { itens: [], gerado_em: "" }; }),
-    apiGet()
+    apiGet(),
+    fetch("dados/estudos.json", { cache: "no-store" }).then(function (r) { return r.json(); }).catch(function () { return { episodios: [] }; })
   ]).then(function (res) {
-    CFG = res[0]; DADOS = res[1]; state = res[2] && res[2].decisions ? res[2] : { decisions: {} };
-    if (!state.decisions) state.decisions = {};
+    CFG = res[0]; DADOS = res[1];
+    var st = res[2] || {};
+    state = { decisions: st.decisions || {}, notes: st.notes || {} };
+    ESTUDOS = res[3] || { episodios: [] };
     CFG.categorias.forEach(function (c) { catMap[c.id] = c; });
     CFG.grupos.forEach(function (g) { grpMap[g.id] = g; });
     if (CFG.subtitulo) $("subtitle").textContent = CFG.subtitulo;
     wire();
     render();
+    if ((params.get("m") || params.get("modo")) === "estudo") setMode("estudo");
   }).catch(function (e) {
     $("feed").innerHTML = '<div class="empty"><b>Erro ao carregar.</b>' + esc(String(e)) + '</div>';
   });

@@ -39,6 +39,7 @@ function load_state($file) {
   $j = json_decode(file_get_contents($file), true);
   if (!is_array($j)) return fresh();
   if (!isset($j['decisions'])) $j['decisions'] = new stdClass();
+  if (!isset($j['notes']))     $j['notes']     = new stdClass();
   return $j;
 }
 
@@ -54,8 +55,9 @@ $fp = fopen($file, 'c+');
 if (!$fp) bad('io');
 flock($fp, LOCK_EX);
 $st = json_decode(stream_get_contents($fp), true);
-if (!is_array($st)) $st = ['decisions' => []];
+if (!is_array($st)) $st = ['decisions' => [], 'notes' => []];
 if (!isset($st['decisions']) || !is_array($st['decisions'])) $st['decisions'] = [];
+if (!isset($st['notes']) || !is_array($st['notes'])) $st['notes'] = [];
 
 function commit($fp, $st) {
   $st['updated_at'] = date('c');
@@ -77,6 +79,16 @@ if ($action === 'mark') {
   if (!in_array($status, $VALID, true)) abort_lock($fp, 'status invalido');
   if ($status === 'pending') { unset($st['decisions'][$id]); }
   else { $st['decisions'][$id] = ['status' => $status, 'at' => date('c')]; }
+  commit($fp, $st);
+}
+
+if ($action === 'note') {
+  // bloco de notas por episodio de estudo (key = id do episodio)
+  $key  = clip($_POST['key'] ?? '', 64);
+  $text = clip($_POST['text'] ?? '', 20000);
+  if ($key === '') abort_lock($fp, 'key vazia');
+  if ($text === '') { unset($st['notes'][$key]); }
+  else { $st['notes'][$key] = ['text' => $text, 'at' => date('c')]; }
   commit($fp, $st);
 }
 
