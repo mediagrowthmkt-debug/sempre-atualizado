@@ -63,10 +63,13 @@
   }
 
   /* ---------- estado ---------- */
+  var LS_DEC = "sa_decisions_bruno";  // backup local da selecao (rede de seguranca contra reload/queda)
+  function persistLocal() { try { localStorage.setItem(LS_DEC, JSON.stringify(state.decisions)); } catch (e) {} }
   function statusOf(id) { return (state.decisions[id] && state.decisions[id].status) || "pending"; }
   function setStatus(id, status) {
     if (status === "pending") delete state.decisions[id];
     else state.decisions[id] = { status: status };
+    persistLocal();  // salva local ANTES da rede: se o servidor falhar, a selecao nao se perde
     apiPost("mark", { id: id, status: status })
       .then(function (r) { if (r.status === 401) return showGate(); if (status !== "read") toast(status === "checked" ? "Selecionado, salvo ✓" : "Desmarcado, salvo ✓"); })
       .catch(function () { toast("Não consegui salvar. Verifique a conexão."); });
@@ -555,8 +558,13 @@
   }
   function materiaURL(id) { return new URL("materias/" + id + ".html", location.href).href; }
   function gerarLinks() {
-    var sel = DADOS.itens.filter(function (it) { return statusOf(it.id) === "checked"; });
-    return { txt: sel.map(function (it) { return materiaURL(it.id); }).join("\n"), n: sel.length };
+    // Gera os links a partir dos IDs SELECIONADOS (state.decisions), nao da lista de conteudo.
+    // Assim, se o banco mudar/reduzir (recoleta, poda), o link do que voce marcou NUNCA some:
+    // a materia e sempre materias/<id>.html, so precisa do id.
+    var ids = Object.keys(state.decisions).filter(function (id) {
+      return state.decisions[id] && state.decisions[id].status === "checked";
+    });
+    return { txt: ids.map(materiaURL).join("\n"), n: ids.length };
   }
   function gerarAudioPrompt() {
     var sel = DADOS.itens.filter(function (it) { return statusOf(it.id) === "checked"; });
@@ -620,6 +628,7 @@
     var ids = DADOS.itens.filter(function (it) { return statusOf(it.id) === "checked"; }).map(function (it) { return it.id; });
     if (!ids.length) return;
     ids.forEach(function (id) { state.decisions[id] = { status: "read" }; });
+    persistLocal();
     apiPost("bulk", { ids: ids.join(","), status: "read" }).then(function (r) { if (r.status === 401) return showGate(); toast("Arquivados 📁"); }).catch(function () { toast("Salvo local, checar conexão"); });
     closeModal(); render();
   }
@@ -664,6 +673,14 @@
         if (!DADOS.itens) DADOS.itens = [];
         ESTUDOS = data.estudos || { episodios: [] };
         state = { decisions: norm(st.decisions), notes: norm(st.notes), progress: norm(st.progress) };
+        // rede de seguranca: resgata marcacoes locais que nao chegaram ao servidor (nunca perde a selecao num reload)
+        try {
+          var loc = JSON.parse(localStorage.getItem(LS_DEC) || "{}");
+          Object.keys(loc).forEach(function (id) {
+            if (!state.decisions[id] && loc[id] && loc[id].status) state.decisions[id] = loc[id];
+          });
+        } catch (e) {}
+        persistLocal();
         catMap = {}; grpMap = {};
         (CFG.categorias || []).forEach(function (c) { catMap[c.id] = c; });
         (CFG.grupos || []).forEach(function (g) { grpMap[g.id] = g; });
