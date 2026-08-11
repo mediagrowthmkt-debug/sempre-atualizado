@@ -4,6 +4,10 @@
   "usuario": "bruno",
   "grupos": [
     { "id": "negocios", "nome": "Empresa & Negócios", "emoji": "🏢" },
+    { "id": "marketing", "nome": "Marketing & Tráfego", "emoji": "📣" },
+    { "id": "social", "nome": "Redes & Autoridade", "emoji": "📲" },
+    { "id": "tech", "nome": "Tech & IA", "emoji": "💻" },
+    { "id": "mentalidade", "nome": "Energia & Riqueza", "emoji": "🌌" },
     { "id": "pessoal", "nome": "Pessoal & Desenvolvimento", "emoji": "🌱" },
     { "id": "nichos", "nome": "Clientes & Nichos", "emoji": "🤝" }
   ],
@@ -174,6 +178,136 @@
       "id": "neurociencia", "emoji": "🧠", "nome": "Neurociência", "grupo": "nichos", "lang": "pt",
       "desc": "Neurociência aplicada ao marketing e ao negócio: comportamento do consumidor, persuasão, gatilhos de decisão, hábitos, foco e memória. Melhora copy, ofertas e a forma de atender os clientes.",
       "queries": ["neurociência aplicada ao marketing persuasão", "neuromarketing comportamento do consumidor gatilhos", "neuroscience decision making buying behavior", "neurociência hábitos foco e produtividade"]
+    },
+
+    {
+      "id": "marketing", "emoji": "📣", "nome": "Marketing (geral)", "grupo": "marketing", "lang": "pt",
+      "desc": "Tendências, novidades e boas práticas de marketing digital em geral.",
+      "queries": ["novidades e tendências de marketing digital", "marketing trends this week", "o que mudou no marketing digital", "digital marketing best practices 2026"]
+    },
+    {
+      "id": "estrategias_marketing", "emoji": "🧩", "nome": "Estratégias de Marketing", "grupo": "marketing", "lang": "pt",
+      "desc": "Frameworks, funis, posicionamento, go-to-market e estratégias que geram resultado.",
+      "queries": ["estratégias de marketing que funcionam", "marketing strategy framework funnel", "posicionamento e go-to-market marca", "growth marketing strategy case"]
+    },
+    {
+      "id": "seo", "emoji": "🔎", "nome": "SEO", "grupo": "marketing", "lang": "en",
+      "desc": "SEO, ranqueamento no Google, novidades de busca e otimização (inclui busca por IA).",
+      "queries": ["SEO news algorithm update this week", "SEO tips ranking Google 2026", "AI search GEO optimization SEO", "novidades SEO busca Google"]
+    },
+    {
+      "id": "oportunidades_mercado", "emoji": "🕵️", "nome": "Oportunidades de Mercado", "grupo": "marketing", "lang": "pt",
+      "desc": "Nichos em alta, gaps de mercado, tendências de consumo e novos modelos de negócio.",
+      "queries": ["oportunidades de mercado tendências de negócio", "emerging market opportunities business ideas", "nichos em alta para empreender 2026", "tendências de consumo novos mercados"]
+    },
+    {
+      "id": "google_ads", "emoji": "🔵", "nome": "Google Ads", "grupo": "marketing", "lang": "en",
+      "desc": "Novidades, recursos e estratégias de Google Ads (Search, PMax, LSA).",
+      "queries": ["Google Ads new features update", "Google Ads strategy tips 2026", "Performance Max best practices", "Google Local Services Ads contractors"]
+    },
+    {
+      "id": "meta_ads", "emoji": "🔷", "nome": "Meta Ads", "grupo": "marketing", "lang": "en",
+      "desc": "Novidades e estratégias de anúncios no Facebook e Instagram (Meta).",
+      "queries": ["Meta Ads new features update", "Facebook Instagram ads strategy 2026", "Advantage+ campaigns best practices", "Meta ads creative tips"]
+    },
+    {
+      "id": "tiktok_ads", "emoji": "🎵", "nome": "TikTok Ads", "grupo": "marketing", "lang": "en",
+      "desc": "Novidades e estratégias de anúncios no TikTok (Spark Ads, criativos).",
+      "queries": ["TikTok Ads strategy tips 2026", "TikTok ads new features update", "TikTok Spark Ads best practices", "TikTok ads creative that converts"]
+    },
+
+    {
+      "id": "instagram", "emoji": "📸", "nome": "Instagram", "grupo": "social", "lang": "en",
+      "desc": "Plataforma Instagram: novos recursos, alcance, Reels e estratégia de crescimento.",
+      "queries": ["Instagram new features update 2026", "Instagram growth strategy reels", "Instagram algorithm changes reach", "novidades do Instagram"]
+    },
+    {
+      "id": "algoritmo", "emoji": "⚙️", "nome": "Algoritmo (Redes)", "grupo": "social", "lang": "en",
+      "desc": "Como funcionam os algoritmos das redes (Instagram, TikTok, YouTube) e como usar a favor.",
+      "queries": ["social media algorithm how it works 2026", "Instagram TikTok algorithm ranking factors", "como funciona o algoritmo das redes", "beat the algorithm reach tips"]
+    },
+    {
+      "id": "visualizacao", "emoji": "👁️", "nome": "Visualização / Alcance", "grupo": "social", "lang": "pt",
+      "desc": "Aumentar views e alcance nas redes sociais, recuperar alcance que caiu.",
+      "queries": ["como aumentar alcance e visualizações redes sociais", "increase reach and views social media", "por que meu alcance caiu no Instagram", "reach and views growth hacks"]
+    },
+    {
+      "id": "autoridade", "emoji": "👑", "nome": "Autoridade", "grupo": "social", "lang": "pt",
+      "desc": "Construir autoridade, marca pessoal e posicionamento de especialista.",
+      "queries": ["como construir autoridade e marca pessoal", "build authority personal brand online", "posicionamento de especialista autoridade digital", "thought leadership content strategy"]
+    },
+    {
+      "id": "ganho_seguidores", "emoji": "📈", "nome": "Ganho de Seguidores", "grupo": "social", "lang": "pt",
+      "desc": "Crescer seguidores de forma orgânica e consistente nas redes.",
+      "queries": ["como ganhar seguidores organicamente", "grow followers organically 2026", "estratégia de crescimento de seguidores", "gain followers fast organic tips"]
+    },
+    {
+      "id": "viral_momento", "emoji": "🔥", "nome": "Viralizando no Momento", "grupo": "social", "lang": "pt",
+      "desc": "O que está viralizando AGORA e dá pra adaptar e usar com os clientes da agência.",
+      "queries": ["o que está viralizando agora nas redes", "trending viral content right now", "trends virais do momento reels tiktok", "viral trends this week marketing"]
+    },
+    {
+      "id": "chamar_atencao", "emoji": "🎯", "nome": "Como Chamar Atenção", "grupo": "social", "lang": "pt",
+      "desc": "Ganchos, hooks e técnicas pra prender a atenção nos primeiros segundos.",
+      "queries": ["como chamar atenção nos primeiros segundos", "attention grabbing hooks content", "ganchos que prendem atenção na copy", "scroll stopping hooks video"]
+    },
+
+    {
+      "id": "dev_apps", "emoji": "📱", "nome": "Desenvolvimento de Apps", "grupo": "tech", "lang": "en",
+      "desc": "Criar aplicativos (mobile e web), no-code, vibe coding e novidades de desenvolvimento.",
+      "queries": ["app development trends 2026", "build apps no-code AI tools", "mobile app development best practices", "vibe coding build app fast"]
+    },
+    {
+      "id": "ciberseguranca", "emoji": "🛡️", "nome": "Cibersegurança", "grupo": "tech", "lang": "en",
+      "desc": "Ameaças, vazamentos, defesa e boas práticas de segurança (apps e negócio).",
+      "queries": ["cybersecurity news threats this week", "cybersecurity best practices small business", "data breach protection tips", "web app security vulnerabilities 2026"]
+    },
+    {
+      "id": "ai_agents", "emoji": "🤝", "nome": "AI Agents", "grupo": "tech", "lang": "en",
+      "desc": "Agentes de IA: frameworks, casos de uso, ferramentas e como aplicar no negócio.",
+      "queries": ["AI agents news frameworks 2026", "building AI agents use cases business", "autonomous AI agents tools", "AI agent LangGraph CrewAI news"]
+    },
+    {
+      "id": "ai_news", "emoji": "🧠", "nome": "AI News", "grupo": "tech", "lang": "en",
+      "desc": "Notícias e lançamentos de IA (modelos, produtos, mercado).",
+      "queries": ["AI news this week model launches", "latest AI releases OpenAI Anthropic Google", "artificial intelligence breaking news", "new AI models announcement 2026"]
+    },
+
+    {
+      "id": "energia", "emoji": "⚡", "nome": "Energia / Vibração", "grupo": "mentalidade", "lang": "pt",
+      "desc": "Energia pessoal, vibração, frequência e como manter alta disposição e foco.",
+      "queries": ["como elevar sua energia e vibração", "raise your energy vibration frequency", "energia pessoal foco e disposição", "high vibration mindset practices"]
+    },
+    {
+      "id": "leis_universo", "emoji": "🌌", "nome": "Leis do Universo", "grupo": "mentalidade", "lang": "pt",
+      "desc": "Lei da atração, manifestação e as leis universais aplicadas à vida e ao negócio.",
+      "queries": ["leis do universo lei da atração", "law of attraction manifestation universe", "como manifestar usando as leis universais", "universal laws manifestation guide"]
+    },
+    {
+      "id": "energia_sexual", "emoji": "🔥", "nome": "Energia Sexual / Transmutação", "grupo": "mentalidade", "lang": "pt",
+      "desc": "Transmutação da energia sexual em foco, criatividade, disciplina e produtividade.",
+      "queries": ["transmutação da energia sexual", "sexual energy transmutation practice", "como transmutar energia sexual em foco", "sexual transmutation creativity discipline"]
+    },
+    {
+      "id": "espiritualidade", "emoji": "🙏", "nome": "Espiritualidade", "grupo": "mentalidade", "lang": "pt",
+      "desc": "Crescimento espiritual, consciência, propósito e práticas de conexão.",
+      "queries": ["crescimento espiritual e consciência", "spirituality growth consciousness practices", "espiritualidade e propósito de vida", "spiritual awakening daily practices"]
+    },
+    {
+      "id": "riqueza", "emoji": "💎", "nome": "Riqueza / Abundância", "grupo": "mentalidade", "lang": "pt",
+      "desc": "Mentalidade de riqueza e abundância, hábitos e crenças de quem prospera.",
+      "queries": ["mentalidade de riqueza e abundância", "wealth mindset abundance millionaire habits", "como pensar como rico crenças de riqueza", "abundance money mindset shift"]
+    },
+
+    {
+      "id": "historias_sucesso", "emoji": "🏆", "nome": "Histórias de Sucesso", "grupo": "negocios", "lang": "pt",
+      "desc": "Casos reais de empreendedores que deram certo: o que fizeram e o que dá pra copiar.",
+      "queries": ["história de sucesso empreendedor como construiu", "founder success story how they built", "cases de empreendedores de sucesso", "entrepreneur success case study lessons"]
+    },
+    {
+      "id": "erros_empreendedores", "emoji": "⚠️", "nome": "Erros de Empreendedores", "grupo": "negocios", "lang": "pt",
+      "desc": "Erros comuns de empreendedores e empresas pra aprender com o erro dos outros.",
+      "queries": ["erros que empreendedores cometem", "common startup mistakes founders make", "por que empresas quebram lições", "why businesses fail lessons learned"]
     }
   ]
 }
