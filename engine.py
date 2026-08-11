@@ -22,6 +22,7 @@ Setup (uma vez):
 
 Uso:
   engine.py coletar [--cat id1,id2] [--por-query N] [--publicar]   # RSS backbone (append + dedupe)
+  engine.py contexto [--cat id1,id2]                               # briefs dos clientes (CLIENTE.md + reunioes + grupo) p/ ancorar a pesquisa dos nichos
   engine.py add --file payload.json [--publicar]                   # ingere pesquisa profunda do agente
   engine.py gerar-texto [--status checked|all|novos] [--out arq]   # monta o texto em capitulos
   engine.py materias [--cat id1,id2]                               # gera materias/<id>.html (curadoria por assunto, pro NotebookLM)
@@ -205,6 +206,135 @@ def cmd_coletar(cats=None, por_query=6, publicar=False):
     print(f"\n✅ Coleta RSS: {novos} itens novos. Total no banco: {len(dados['itens'])}.")
     if publicar:
         cmd_publicar(f"coleta RSS {today()} (+{novos})")
+
+
+# ---------------------------------------------------------------- contexto de cliente (grupo "nichos")
+# Antes de pesquisar as categorias de Clientes & Nichos, junta o material REAL de cada cliente
+# (CLIENTE.md + ultimas reunioes + id do grupo) num brief -> a pesquisa fica rica e no contexto do cliente.
+import glob as _glob, shutil as _shutil
+
+def _which_mg(name):
+    p = _shutil.which(name)
+    if p:
+        return p
+    for cand in (f"/Users/bruno/mg-mirror/bin/{name}", f"/root/mg-mirror/bin/{name}",
+                 os.path.expanduser(f"~/mg-mirror/bin/{name}")):
+        if os.path.exists(cand):
+            return cand
+    return None
+
+
+def _resolve_cliente(q):
+    """Path canonico da pasta do cliente (mg-cliente resolve -> fallback glob por slug)."""
+    mgc = _which_mg("mg-cliente")
+    if mgc:
+        try:
+            r = subprocess.run([mgc, "resolve", q], capture_output=True, text=True, timeout=30)
+            for ln in (r.stdout or "").splitlines():
+                if "→" in ln or "->" in ln:
+                    path = ln.replace("->", "→").split("→")[-1].strip()
+                    if os.path.isdir(path):
+                        return path
+        except Exception:
+            pass
+    # fallback: procura em clientes_convidados/clientes/*<token>*
+    base = os.path.expanduser("~/clientes_convidados/clientes")
+    if not os.path.isdir(base):
+        base = "/Users/bruno/clientes_convidados/clientes"
+    tok = re.sub(r"[^a-z0-9]", "", (q or "").lower())
+    if os.path.isdir(base) and tok:
+        for d in sorted(_glob.glob(os.path.join(base, "*"))):
+            if os.path.isdir(d) and tok in re.sub(r"[^a-z0-9]", "", os.path.basename(d).lower()):
+                return d
+    return None
+
+
+def _read_head(path, max_chars=7000):
+    try:
+        t = open(path, encoding="utf-8", errors="ignore").read()
+        return t if len(t) <= max_chars else t[:max_chars] + "\n…[truncado]…"
+    except Exception:
+        return ""
+
+
+def _ultimas_reunioes(folder, n=2):
+    """As n reunioes mais recentes (prefere resumo/, senao transcricao/)."""
+    for sub in ("reunioes/resumo", "reunioes/transcricao", "reunioes"):
+        d = os.path.join(folder, sub)
+        arqs = sorted(_glob.glob(os.path.join(d, "*.md")), key=lambda p: os.path.getmtime(p), reverse=True) if os.path.isdir(d) else []
+        if arqs:
+            return arqs[:n]
+    return []
+
+
+def _grupo_id(cliente_md_txt):
+    m = re.search(r"(\d{12,}-group)", cliente_md_txt or "")
+    return m.group(1) if m else ""
+
+
+def cmd_contexto(cats=None):
+    """Gera briefs de contexto dos clientes das categorias do grupo 'nichos'.
+       Escreve _scratch/contexto/<slug>.md por cliente + INDEX.md, e imprime um resumo curto.
+       O agente LÊ esses briefs no PASSO 1 e ancora a pesquisa nas dores/temas reais do cliente."""
+    cfg = load_cfg()
+    alvo = [c for c in cfg["categorias"]
+            if c.get("clientes") and (not cats or c["id"] in cats)]
+    if not alvo:
+        print("Nenhuma categoria com clientes no escopo. (Grupo 'nichos': nicho_contractor, nicho_motel, aciona_ia.)")
+        return
+    outdir = os.path.join(REPO, "_scratch", "contexto")
+    os.makedirs(outdir, exist_ok=True)
+    vistos = {}
+    index = ["# Contexto de clientes — Sempre Atualizado", f"_gerado {now_iso()}_", ""]
+    for c in alvo:
+        index.append(f"## {c['emoji']} {c['nome']} (`{c['id']}`)")
+        for cli in c.get("clientes", []):
+            nome, q = cli.get("nome", ""), cli.get("q") or cli.get("nome", "")
+            slug = re.sub(r"[^a-z0-9]+", "-", nome.lower()).strip("-")
+            if slug in vistos:
+                index.append(f"- {nome} → `_scratch/contexto/{slug}.md` (já coletado)")
+                continue
+            folder = _resolve_cliente(q)
+            partes = [f"# {nome}", f"_categoria: {c['nome']} ({c['id']})_ · nota: {cli.get('nota','')}", ""]
+            grupo = ""
+            if folder:
+                partes.append(f"pasta: {folder}\n")
+                cmd = os.path.join(folder, "CLIENTE.md")
+                if os.path.exists(cmd):
+                    cmd_txt = open(cmd, encoding="utf-8", errors="ignore").read()
+                    grupo = _grupo_id(cmd_txt)
+                    partes.append("## CLIENTE.md (negócio, nicho, links, dores)")
+                    partes.append(_read_head(cmd, 6500))
+                    partes.append("")
+                reus = _ultimas_reunioes(folder, 2)
+                if reus:
+                    partes.append("## Últimas reuniões (o que foi falado — dores, pedidos, decisões)")
+                    for r in reus:
+                        partes.append(f"### {os.path.basename(r)}")
+                        partes.append(_read_head(r, 6500))
+                        partes.append("")
+                if grupo:
+                    partes.append(f"## Grupo WhatsApp: {grupo}")
+                    partes.append("Pra minerar assuntos recentes do grupo (opcional): usar as ferramentas de WhatsApp respeitando o cap de output (| head -N).")
+                    partes.append("")
+            else:
+                partes.append("⚠️ pasta não resolvida — pesquisar só pelo nicho/nome.")
+            brief_path = os.path.join(outdir, slug + ".md")
+            open(brief_path, "w", encoding="utf-8").write("\n".join(partes))
+            vistos[slug] = brief_path
+            tags = []
+            if folder:
+                tags.append("pasta ✓")
+            if grupo:
+                tags.append("grupo ✓")
+            if folder and _ultimas_reunioes(folder, 1):
+                tags.append("reuniões ✓")
+            index.append(f"- {nome} → `_scratch/contexto/{slug}.md` ({', '.join(tags) or 'só nome'})")
+        index.append("")
+    open(os.path.join(outdir, "INDEX.md"), "w", encoding="utf-8").write("\n".join(index))
+    print(f"✅ Contexto de {len(vistos)} clientes em {outdir}/  (leia INDEX.md e os briefs antes de pesquisar).")
+    for slug, p in vistos.items():
+        print(f"   · {slug}: {p}")
 
 
 # ---------------------------------------------------------------- ingest (pesquisa profunda do agente)
@@ -663,6 +793,9 @@ def main():
         cats = arg("--cat")
         cats = [x.strip() for x in cats.split(",")] if cats else None
         cmd_coletar(cats=cats, por_query=int(arg("--por-query", "6")), publicar="--publicar" in a)
+    elif c == "contexto":
+        cats = arg("--cat")
+        cmd_contexto(cats=[x.strip() for x in cats.split(",")] if cats else None)
     elif c == "add":
         cmd_add(arg("--file"), publicar="--publicar" in a)
     elif c == "gerar-texto":

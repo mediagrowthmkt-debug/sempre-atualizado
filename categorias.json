@@ -4,7 +4,8 @@
   "usuario": "bruno",
   "grupos": [
     { "id": "negocios", "nome": "Empresa & Negócios", "emoji": "🏢" },
-    { "id": "pessoal", "nome": "Pessoal & Desenvolvimento", "emoji": "🌱" }
+    { "id": "pessoal", "nome": "Pessoal & Desenvolvimento", "emoji": "🌱" },
+    { "id": "nichos", "nome": "Clientes & Nichos", "emoji": "🤝" }
   ],
   "categorias": [
     {
@@ -138,6 +139,41 @@
       "id": "walk", "emoji": "🚶", "nome": "Walk / Reflexão", "grupo": "pessoal", "lang": "pt",
       "desc": "Caminhada como reflexão, clareza mental, benefícios de caminhar.",
       "queries": ["benefícios da caminhada clareza mental", "walking meditation reflection benefits", "caminhada e produtividade reflexão", "walking for creativity mental health"]
+    },
+
+    {
+      "id": "nicho_contractor", "emoji": "🏗️", "nome": "Nicho Construção / Contractor", "grupo": "nichos", "lang": "en",
+      "desc": "Marketing, geração de leads e crescimento para general contractors, remodeling, construção, pintura, carpintaria, tile e engenharia (base de clientes EUA/MA). Ideias que melhoram o trabalho pra esses clientes.",
+      "clientes": [
+        { "nome": "Wolf Carpenters", "q": "Wolf", "nota": "General contractor / carpintaria (EUA)" },
+        { "nome": "Premium Pro", "q": "Premium Pro", "nota": "General contractor / remodeling / pintura (EUA)" },
+        { "nome": "DeFaria Construction", "q": "DeFaria", "nota": "Construção civil (EUA) + Orgânico mensal" },
+        { "nome": "Innov Builders", "q": "Innov", "nota": "Construção / builders (EUA, MA)" },
+        { "nome": "Becker General Services", "q": "Becker", "nota": "Serviços gerais / tile (EUA, MA)" },
+        { "nome": "Bronx Engenharia", "q": "Bronx", "nota": "Engenharia / construção" }
+      ],
+      "queries": ["general contractor marketing lead generation USA", "remodeling contractor social media strategy", "home improvement contractor Google Ads leads", "construction company branding content ideas"]
+    },
+    {
+      "id": "nicho_motel", "emoji": "🏩", "nome": "Nicho Motel / Hospedagem", "grupo": "nichos", "lang": "pt",
+      "desc": "Marketing, ocupação, receita e experiência para motéis e hospedagem por período. Ideias que melhoram o trabalho pro Motel Xenon.",
+      "clientes": [
+        { "nome": "Motel Xenon", "q": "Xenon", "nota": "Motel (hospedagem)" }
+      ],
+      "queries": ["marketing para motel ocupação e receita", "estratégia de redes sociais para motel", "revenue management hospedagem por período", "campanhas e promoções motel fidelização"]
+    },
+    {
+      "id": "aciona_ia", "emoji": "🤖", "nome": "Aciona.IA / Agentes de IA", "grupo": "nichos", "lang": "pt",
+      "desc": "Negócio de agentes de IA: vender, entregar e escalar agentes/automação de IA para empresas. Cases, ofertas e ferramentas que melhoram o trabalho pro Aciona.IA.",
+      "clientes": [
+        { "nome": "Aciona.IA", "q": "Aciona", "nota": "Agentes de IA" }
+      ],
+      "queries": ["AI agents for business use cases", "selling AI automation services agency", "agentes de IA para empresas casos de uso", "how AI agencies package and price AI agents"]
+    },
+    {
+      "id": "neurociencia", "emoji": "🧠", "nome": "Neurociência", "grupo": "nichos", "lang": "pt",
+      "desc": "Neurociência aplicada ao marketing e ao negócio: comportamento do consumidor, persuasão, gatilhos de decisão, hábitos, foco e memória. Melhora copy, ofertas e a forma de atender os clientes.",
+      "queries": ["neurociência aplicada ao marketing persuasão", "neuromarketing comportamento do consumidor gatilhos", "neuroscience decision making buying behavior", "neurociência hábitos foco e produtividade"]
     }
   ]
 }
