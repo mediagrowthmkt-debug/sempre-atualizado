@@ -520,15 +520,28 @@ def _git_backup(msg=None):
 
 
 def cmd_deploy_frontend():
-    """Sobe a pagina (index/style/app/config + materias) pro public_html/atualizado da Hostinger."""
+    """Sobe a pagina (index/style/app/config + materias) pro public_html/atualizado da Hostinger.
+       Injeta cache-busting (?v=stamp) nos assets do index.html -> o navegador sempre pega a ultima versao."""
     sh(["ssh", "-o", "ConnectTimeout=20", SSH, f"mkdir -p {WEB_REMOTE}/materias && echo OK"])
+    stamp = datetime.now().strftime("%Y%m%d%H%M%S")
+    os.makedirs(os.path.join(REPO, "_scratch"), exist_ok=True)
     for f in FRONT_FILES:
         p = os.path.join(REPO, f)
-        if os.path.exists(p):
+        if not os.path.exists(p):
+            continue
+        if f == "index.html":
+            html = open(p, encoding="utf-8").read()
+            html = html.replace('href="style.css"', f'href="style.css?v={stamp}"')
+            html = html.replace('src="config.js"', f'src="config.js?v={stamp}"')
+            html = html.replace('src="app.js"', f'src="app.js?v={stamp}"')
+            tmp = os.path.join(REPO, "_scratch", "index.deploy.html")
+            open(tmp, "w", encoding="utf-8").write(html)
+            sh(["scp", "-o", "ConnectTimeout=30", tmp, f"{SSH}:{WEB_REMOTE}/index.html"])
+        else:
             sh(["scp", "-o", "ConnectTimeout=30", p, f"{SSH}:{WEB_REMOTE}/{f}"])
     if os.path.isdir(MATERIAS):
         sh(["rsync", "-az", "--delete", "-e", "ssh", MATERIAS + "/", f"{SSH}:{WEB_REMOTE}/materias/"])
-    print(f"✅ Pagina no ar: {SITE_URL}/?u={USER}")
+    print(f"✅ Pagina no ar (v={stamp}): {SITE_URL}/?u={USER}")
 
 
 def cmd_push_content():

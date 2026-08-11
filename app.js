@@ -322,7 +322,16 @@
   }
 
   function wireReader(rd, ep, tops) {
-    $("rd-back").onclick = function () { renderEstudoGrid(); window.scrollTo(0, 0); };
+    // rolagem livre enquanto escuta: marca quando VOCE rola pra o auto-scroll ceder
+    var userScrollTs = 0;
+    function markUserScroll() { userScrollTs = Date.now(); }
+    window.addEventListener("wheel", markUserScroll, { passive: true });
+    window.addEventListener("touchmove", markUserScroll, { passive: true });
+    $("rd-back").onclick = function () {
+      window.removeEventListener("wheel", markUserScroll);
+      window.removeEventListener("touchmove", markUserScroll);
+      renderEstudoGrid(); window.scrollTo(0, 0);
+    };
 
     var bls = [].slice.call(rd.querySelectorAll(".bl"));
     var audio = rd.querySelector("#rd-audio");
@@ -438,6 +447,7 @@
     }
 
     // ---- sincronizacao: so o topico ATUAL mostra a barra viva; os outros ficam vazios ----
+    var lastActiveIdx = -1;
     function refresh() {
       var t = audio.currentTime || 0, dur = audio.duration || 0;
       if (barFill && dur) barFill.style.width = (t / dur * 100) + "%";
@@ -459,7 +469,14 @@
         var capOf = bls[idx].dataset.cap;
         chips.forEach(function (ch) { ch.classList.toggle("on", ch.dataset.cap === capOf); });
       }
-      if (idx >= 0 && !audio.paused) bls[idx].scrollIntoView({ behavior: "smooth", block: "center" });
+      // rolagem livre: acompanha o topico so quando ELE muda, esta fora da tela e voce nao rolou nos ultimos 6s
+      if (idx !== lastActiveIdx) {
+        lastActiveIdx = idx;
+        if (idx >= 0 && !audio.paused && (Date.now() - userScrollTs > 6000)) {
+          var rct = bls[idx].getBoundingClientRect();
+          if (rct.top < 100 || rct.bottom > (window.innerHeight - 40)) bls[idx].scrollIntoView({ behavior: "smooth", block: "center" });
+        }
+      }
     }
     audio.addEventListener("timeupdate", function () { refresh(); clearTimeout(posTmr); posTmr = setTimeout(savePos, 4000); });
     audio.addEventListener("loadedmetadata", refresh);
