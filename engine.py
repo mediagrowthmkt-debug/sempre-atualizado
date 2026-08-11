@@ -135,12 +135,48 @@ def fetch(url, timeout=20):
         return r.read()
 
 
+def _parse_rss_regex(xml_bytes, por_query):
+    """Fallback sem ElementTree (Python com expat quebrado, ex.: 3.14 do brew).
+       Extrai os <item> por regex e devolve o mesmo formato de parse_rss."""
+    out = []
+    txt = xml_bytes.decode("utf-8", "ignore") if isinstance(xml_bytes, (bytes, bytearray)) else str(xml_bytes)
+
+    def tag(block, name):
+        m = re.search(rf"<{name}[^>]*>(.*?)</{name}>", block, re.S | re.I)
+        if not m:
+            return ""
+        v = m.group(1).strip()
+        cd = re.match(r"^\s*<!\[CDATA\[(.*?)\]\]>\s*$", v, re.S)
+        return (cd.group(1) if cd else v).strip()
+
+    for m in re.finditer(r"<item\b[^>]*>(.*?)</item>", txt, re.S | re.I):
+        block = m.group(1)
+        title = strip_html(tag(block, "title"))
+        link = strip_html(tag(block, "link"))
+        desc = strip_html(tag(block, "description"))
+        source = strip_html(tag(block, "source"))
+        if not source and " - " in title:
+            source = title.rsplit(" - ", 1)[-1].strip()
+        headline = title.rsplit(" - ", 1)[0].strip() if (" - " in title and source and title.endswith(source)) else title
+        pub = tag(block, "pubDate")
+        try:
+            data = parsedate_to_datetime(pub).astimezone().strftime("%Y-%m-%d")
+        except Exception:
+            data = today()
+        if not link or not headline:
+            continue
+        out.append({"titulo": headline, "url": link, "resumo": desc, "fonte": source or "Google News", "data": data})
+        if len(out) >= por_query:
+            break
+    return out
+
+
 def parse_rss(xml_bytes, por_query):
     out = []
     try:
         root = ET.fromstring(xml_bytes)
     except Exception:
-        return out
+        return _parse_rss_regex(xml_bytes, por_query)
     for it in root.iter("item"):
         title = (it.findtext("title") or "").strip()
         link = (it.findtext("link") or "").strip()
