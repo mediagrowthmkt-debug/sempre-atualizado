@@ -283,13 +283,14 @@
       var hasNote = !!noteVal;
       var tag = tp.tag ? '<span class="bl-tag">' + esc(tp.tag) + '</span>' : "";
       html +=
-        '<li class="bl" data-sec="' + (tp.sec || 0) + '" data-cap="' + capIdx + '" data-idx="' + idx + '">' +
+        '<li class="bl" data-sec="' + (tp.sec || 0) + '" data-cap="' + capIdx + '" data-idx="' + idx + '" data-pkey="' + esc(key) + '">' +
           '<span class="bl-prog"></span>' +
           '<div class="bl-row">' +
             '<button class="bl-jump" title="Ouvir este trecho">' + esc(tp.t || mmss(tp.sec || 0)) + '</button>' +
             '<div class="bl-body"><p class="bl-txt">' + esc(tp.txt || "") + '</p>' + tag + '</div>' +
             '<button class="bl-note-btn' + (hasNote ? ' has' : '') + '" title="Anotar neste tópico">✎</button>' +
           '</div>' +
+          '<div class="bl-track"><i class="bl-fill"></i></div>' +
           '<textarea class="bl-note' + (hasNote ? ' show' : '') + '" data-key="' + esc(key) + '" placeholder="Sua anotação neste tópico…">' + esc(noteVal) + '</textarea>' +
         '</li>';
     });
@@ -377,19 +378,53 @@
 
     if (!audio) return;
 
-    // clique na barra = seek
+    // clique na barra global = seek
     if (bar) bar.onclick = function (e) {
       if (!audio.duration) return;
       var r = bar.getBoundingClientRect();
       audio.currentTime = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)) * audio.duration;
     };
 
-    // sincronizacao com o audio
+    // ---- progresso PROPRIO de cada topico (enche conforme ouve; salva onde parou por topico) ----
+    if (!state.progress) state.progress = {};
+    if (!state.progress[ep.id]) state.progress[ep.id] = {};
+    var epProg = state.progress[ep.id];
+    var segs = bls.map(function (li) {
+      return { fill: li.querySelector(".bl-fill"), key: li.dataset.pkey, start: parseFloat(li.dataset.sec) || 0 };
+    });
+    // aplica o que ja estava salvo
+    segs.forEach(function (s) { if (s.fill) s.fill.style.width = ((epProg[s.key] || 0) * 100) + "%"; });
+    var progTmr = null, progDirty = false;
+    function saveProg() {
+      if (!progDirty) return; progDirty = false;
+      apiPost("progress", { key: ep.id, map: JSON.stringify(epProg) }).catch(function () {});
+    }
+    function updateFills(t) {
+      var dur = audio.duration || 0;
+      for (var j = 0; j < segs.length; j++) {
+        var st0 = segs[j].start;
+        var en = (j < segs.length - 1) ? segs[j + 1].start : (dur || st0 + 600);
+        var frac;
+        if (t >= en) frac = 1;
+        else if (t <= st0) frac = epProg[segs[j].key] || 0;
+        else frac = (t - st0) / Math.max(1, en - st0);
+        var prev = epProg[segs[j].key] || 0;
+        var mx = frac > prev ? frac : prev;   // guarda o quanto ja ouviu (nao regride ao voltar)
+        if (mx !== prev) {
+          epProg[segs[j].key] = mx; progDirty = true;
+          if (segs[j].fill) segs[j].fill.style.width = (mx * 100) + "%";
+        }
+      }
+      if (progDirty) { clearTimeout(progTmr); progTmr = setTimeout(saveProg, 4000); }
+    }
+
+    // ---- sincronizacao com o audio ----
     var lastIdx = -1;
     function refresh() {
       var t = audio.currentTime || 0, dur = audio.duration || 0;
       if (barFill && dur) barFill.style.width = (t / dur * 100) + "%";
       if (timeEl) timeEl.textContent = mmss(t) + " / " + mmss(dur || 0);
+      updateFills(t);   // barra propria de cada topico, todo tick
       // bullet atual = ultimo cujo sec <= t
       var idx = -1;
       for (var i = 0; i < bls.length; i++) { if ((parseFloat(bls[i].dataset.sec) || 0) <= t + 0.25) idx = i; else break; }
@@ -410,6 +445,8 @@
     audio.addEventListener("timeupdate", refresh);
     audio.addEventListener("loadedmetadata", refresh);
     audio.addEventListener("play", refresh);
+    audio.addEventListener("pause", saveProg);
+    audio.addEventListener("ended", saveProg);
   }
 
   /* ---------- modo ---------- */
@@ -563,7 +600,7 @@
         DADOS = data.radar || { itens: [], gerado_em: "" };
         if (!DADOS.itens) DADOS.itens = [];
         ESTUDOS = data.estudos || { episodios: [] };
-        state = { decisions: norm(st.decisions), notes: norm(st.notes) };
+        state = { decisions: norm(st.decisions), notes: norm(st.notes), progress: norm(st.progress) };
         catMap = {}; grpMap = {};
         (CFG.categorias || []).forEach(function (c) { catMap[c.id] = c; });
         (CFG.grupos || []).forEach(function (g) { grpMap[g.id] = g; });

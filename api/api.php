@@ -187,13 +187,14 @@ if ($action === 'get') {
   $st = read_json($file, ['decisions' => new stdClass(), 'notes' => new stdClass(), 'updated_at' => '']);
   if (!isset($st['decisions'])) $st['decisions'] = new stdClass();
   if (!isset($st['notes']))     $st['notes']     = new stdClass();
+  if (!isset($st['progress']))  $st['progress']  = new stdClass();
   jexit($st);
 }
 
 /* ---------- escrita: trava exclusiva ---------- */
 $VALID = ['checked', 'read', 'pending'];
 
-if (in_array($action, ['mark', 'bulk', 'note'], true)) {
+if (in_array($action, ['mark', 'bulk', 'note', 'progress'], true)) {
   require_write_guard();
   $fp = fopen($file, 'c+');
   if (!$fp) bad('io', 500);
@@ -202,6 +203,7 @@ if (in_array($action, ['mark', 'bulk', 'note'], true)) {
   if (!is_array($st)) $st = ['decisions' => [], 'notes' => []];
   if (!isset($st['decisions']) || !is_array($st['decisions'])) $st['decisions'] = [];
   if (!isset($st['notes']) || !is_array($st['notes']))         $st['notes']     = [];
+  if (!isset($st['progress']) || !is_array($st['progress']))   $st['progress']  = [];
 
   $commit = function () use ($fp, &$st) {
     $st['updated_at'] = date('c');
@@ -241,6 +243,25 @@ if (in_array($action, ['mark', 'bulk', 'note'], true)) {
     if ($key === '') $abort('key vazia');
     if ($text === '') unset($st['notes'][$key]);
     else $st['notes'][$key] = ['text' => $text, 'at' => date('c')];
+    $commit();
+  }
+
+  if ($action === 'progress') {
+    // progresso de escuta por topico de um episodio: map { blKey: fracao 0..1 }
+    $key = clip($_POST['key'] ?? '', 80);          // id do episodio
+    $raw = $_POST['map'] ?? '';
+    if ($key === '') $abort('key vazia');
+    $m = json_decode(is_string($raw) ? $raw : '', true);
+    if (!is_array($m)) $abort('map invalido');
+    $clean = []; $i = 0;
+    foreach ($m as $k => $v) {
+      if ($i++ >= 400) break;
+      $k = mb_substr((string)$k, 0, 80);
+      $v = (float)$v;
+      if ($v < 0) $v = 0; if ($v > 1) $v = 1;
+      $clean[$k] = round($v, 4);
+    }
+    $st['progress'][$key] = $clean;
     $commit();
   }
 }
