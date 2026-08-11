@@ -259,6 +259,16 @@ a:hover{color:var(--gold);text-decoration:underline;text-underline-offset:2px}
   border:1px solid var(--line-gold);border-radius:16px;padding:12px 14px 10px;margin:14px 0 6px;box-shadow:var(--shadow-soft)}
 .rd-player audio{width:100%;height:36px;display:block;filter:invert(.92) hue-rotate(180deg) saturate(.6) brightness(1.05)}
 .rd-noaudio{font-size:12.5px;color:var(--mut);font-style:italic;padding:6px 2px}
+
+/* "Tocando: [tema]" — acompanha o topico atual, muda de cor por tema */
+.rd-player{--now:var(--gold-2)}
+.rd-now{display:flex;align-items:center;gap:9px;padding:0 2px 10px;margin-bottom:10px;border-bottom:1px solid var(--line);transition:border-color .35s}
+.rd-now-kicker{font-size:9.5px;font-weight:800;letter-spacing:1.3px;text-transform:uppercase;color:var(--gold-3);flex:0 0 auto}
+.rd-now-dot{width:9px;height:9px;border-radius:50%;background:var(--mut-2);flex:0 0 auto;transition:background .35s,box-shadow .35s}
+.rd-now-label{font-size:13.5px;font-weight:700;color:var(--ink);letter-spacing:.2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+@supports (background:color-mix(in srgb,red,blue)){
+  .rd-now{border-bottom-color:color-mix(in srgb,var(--now) 32%,var(--line))}
+}
 .rd-progress{margin-top:9px;display:flex;align-items:center;gap:10px}
 .rd-bar{flex:1;height:5px;background:var(--line);border-radius:999px;overflow:hidden;cursor:pointer;position:relative}
 .rd-bar>i{position:absolute;left:0;top:0;bottom:0;width:0;background:linear-gradient(90deg,var(--gold-3),var(--gold-2));border-radius:999px;transition:width .18s linear}

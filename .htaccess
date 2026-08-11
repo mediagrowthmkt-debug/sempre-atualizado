@@ -1,0 +1,8 @@
+# Sempre Atualizado — pagina na Hostinger.
+# HTML sempre revalida (pega o index.html novo com o ?v atualizado dos assets),
+# entao mudanca de app.js/style.css chega sem precisar de hard-refresh.
+<IfModule mod_headers.c>
+  <FilesMatch "\.html$">
+    Header set Cache-Control "no-cache, must-revalidate, max-age=0"
+  </FilesMatch>
+</IfModule>

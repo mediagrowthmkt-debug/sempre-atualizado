@@ -65,7 +65,7 @@ REMOTE     = API_REMOTE  # compat
 API_URL    = os.environ.get("SA_API_URL", "https://mediagrowth.com.br/atualizado-api/api.php")
 SITE_URL   = os.environ.get("SA_SITE_URL", "https://mediagrowth.com.br/atualizado")
 
-FRONT_FILES = ["index.html", "style.css", "app.js", "config.js"]
+FRONT_FILES = ["index.html", "style.css", "app.js", "config.js", ".htaccess"]
 
 UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124 Safari/537.36"
 
