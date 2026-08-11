@@ -300,7 +300,7 @@
     var epNoteVal = (state.notes && state.notes[ep.id] && state.notes[ep.id].text) || "";
     var player = ep.audio_url
       ? '<div class="rd-player" id="rd-player">' +
-          '<div class="rd-now" id="rd-now"><span class="rd-now-kicker">Tocando</span><span class="rd-now-dot" id="rd-now-dot"></span><span class="rd-now-label" id="rd-now-label">Toque numa linha pra começar</span></div>' +
+          '<div class="rd-now" id="rd-now"><span class="rd-now-kicker">Tocando</span><span class="rd-now-dot" id="rd-now-dot"></span><span class="rd-now-tag" id="rd-now-tag"></span><span class="rd-now-label" id="rd-now-label">Toque numa linha pra começar</span></div>' +
           '<audio id="rd-audio" controls preload="none" src="' + esc(ep.audio_url) + '"></audio>' +
           '<div class="rd-progress"><div class="rd-bar" id="rd-bar"><i></i></div><span class="rd-time" id="rd-time">00:00 / 00:00</span></div>' +
           '<div class="rd-hint">◆ Toque numa linha pra ouvir; na linha atual, toca/pausa. Arraste a barra do tópico pra avançar ou voltar dentro dele. Anote no ✎.</div>' +
@@ -398,14 +398,19 @@
                tag: tagEl ? tagEl.textContent : "", txt: txtEl ? txtEl.textContent : "" };
     });
     // "Tocando: [tema]" no player, acompanha o topico atual (ponto muda de cor por tema)
-    var nowLabel = rd.querySelector("#rd-now-label"), nowDot = rd.querySelector("#rd-now-dot"), playerEl = rd.querySelector("#rd-player");
+    var nowLabel = rd.querySelector("#rd-now-label"), nowTag = rd.querySelector("#rd-now-tag"), nowDot = rd.querySelector("#rd-now-dot"), playerEl = rd.querySelector("#rd-player");
     function hueOf(s) { var h = 0; for (var i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0; return h % 360; }
     function updateNow(idx) {
       if (!nowLabel) return;
-      if (idx < 0) { nowLabel.textContent = "Toque numa linha pra começar"; if (nowDot) { nowDot.style.background = "var(--mut-2)"; nowDot.style.boxShadow = "none"; } if (playerEl) playerEl.style.removeProperty("--now"); return; }
+      if (idx < 0) {
+        nowLabel.textContent = "Toque numa linha pra começar"; if (nowTag) nowTag.textContent = "";
+        if (nowDot) { nowDot.style.background = "var(--mut-2)"; nowDot.style.boxShadow = "none"; }
+        if (playerEl) playerEl.style.removeProperty("--now"); return;
+      }
       var s = segs[idx];
-      nowLabel.textContent = s.tag || (s.txt ? (s.txt.length > 46 ? s.txt.slice(0, 46) + "…" : s.txt) : "Tocando");
-      var hue = hueOf(s.tag || nowLabel.textContent);
+      if (nowTag) nowTag.textContent = s.tag || "";      // o tema
+      nowLabel.textContent = s.txt || s.tag || "Tocando"; // o ASSUNTO (texto do topico)
+      var hue = hueOf(s.tag || s.txt || "");
       if (nowDot) { nowDot.style.background = "hsl(" + hue + ",60%,62%)"; nowDot.style.boxShadow = "0 0 9px hsla(" + hue + ",60%,62%,.65)"; }
       if (playerEl) playerEl.style.setProperty("--now", "hsl(" + hue + ",55%,58%)");
     }
