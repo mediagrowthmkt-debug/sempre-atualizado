@@ -302,7 +302,7 @@
       ? '<div class="rd-player">' +
           '<audio id="rd-audio" controls preload="none" src="' + esc(ep.audio_url) + '"></audio>' +
           '<div class="rd-progress"><div class="rd-bar" id="rd-bar"><i></i></div><span class="rd-time" id="rd-time">00:00 / 00:00</span></div>' +
-          '<div class="rd-hint">◆ O tópico atual acende conforme o áudio anda. Toque no tempo pra pular. Anote no ✎.</div>' +
+          '<div class="rd-hint">◆ Toque numa linha pra ouvir; na linha atual, toca/pausa. Arraste a barra do tópico pra avançar ou voltar dentro dele. Anote no ✎.</div>' +
         '</div>'
       : '<div class="rd-player"><div class="rd-noaudio">Áudio não anexado neste estudo.</div></div>';
 
@@ -329,14 +329,6 @@
     var bar = rd.querySelector("#rd-bar"), barFill = bar ? bar.querySelector("i") : null;
     var timeEl = rd.querySelector("#rd-time");
     var chips = [].slice.call(rd.querySelectorAll(".rd-chap-chip"));
-
-    // pular pro trecho (clique no tempo ou na linha)
-    bls.forEach(function (li) {
-      var sec = parseFloat(li.dataset.sec) || 0;
-      var go = function () { if (audio) { try { audio.currentTime = sec; audio.play(); } catch (e) {} } };
-      li.querySelector(".bl-jump").onclick = function (e) { e.stopPropagation(); go(); };
-      li.querySelector(".bl-row").onclick = function (e) { if (e.target.closest(".bl-note-btn")) return; go(); };
-    });
 
     // botao de anotar (abre/fecha a nota; some quando vazia)
     bls.forEach(function (li) {
@@ -385,68 +377,95 @@
       audio.currentTime = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)) * audio.duration;
     };
 
-    // ---- progresso PROPRIO de cada topico (enche conforme ouve; salva onde parou por topico) ----
-    if (!state.progress) state.progress = {};
-    if (!state.progress[ep.id]) state.progress[ep.id] = {};
-    var epProg = state.progress[ep.id];
-    var segs = bls.map(function (li) {
-      return { fill: li.querySelector(".bl-fill"), key: li.dataset.pkey, start: parseFloat(li.dataset.sec) || 0 };
+    // ---- cada topico = um mini-player independente do MESMO audio ----
+    // A barra de cada topico mostra a posicao DENTRO daquele trecho (0..1), nao acumula nem enche
+    // os outros. Clicar na linha do topico atual pausa/toca; em outro, pula pra ele. Arrastar a barra
+    // busca dentro daquele trecho. A reproducao segue contigua de um topico pro outro, sem cortes.
+    var segs = bls.map(function (li, i) {
+      return { li: li, i: i, fill: li.querySelector(".bl-fill"), track: li.querySelector(".bl-track"),
+               start: parseFloat(li.dataset.sec) || 0 };
     });
-    // aplica o que ja estava salvo
-    segs.forEach(function (s) { if (s.fill) s.fill.style.width = ((epProg[s.key] || 0) * 100) + "%"; });
-    var progTmr = null, progDirty = false;
-    function saveProg() {
-      if (!progDirty) return; progDirty = false;
-      apiPost("progress", { key: ep.id, map: JSON.stringify(epProg) }).catch(function () {});
-    }
-    function updateFills(t) {
+    function segEnd(i) {
       var dur = audio.duration || 0;
-      for (var j = 0; j < segs.length; j++) {
-        var st0 = segs[j].start;
-        var en = (j < segs.length - 1) ? segs[j + 1].start : (dur || st0 + 600);
-        var frac;
-        if (t >= en) frac = 1;
-        else if (t <= st0) frac = epProg[segs[j].key] || 0;
-        else frac = (t - st0) / Math.max(1, en - st0);
-        var prev = epProg[segs[j].key] || 0;
-        var mx = frac > prev ? frac : prev;   // guarda o quanto ja ouviu (nao regride ao voltar)
-        if (mx !== prev) {
-          epProg[segs[j].key] = mx; progDirty = true;
-          if (segs[j].fill) segs[j].fill.style.width = (mx * 100) + "%";
-        }
+      return (i < segs.length - 1) ? segs[i + 1].start : (dur || segs[i].start + 600);
+    }
+    function activeIndex(t) {
+      var idx = -1;
+      for (var i = 0; i < segs.length; i++) { if (segs[i].start <= t + 0.05) idx = i; else break; }
+      return idx;
+    }
+    function playSeg(i) { try { audio.currentTime = segs[i].start + 0.01; audio.play(); } catch (e) {} }
+    function toggle() { try { if (audio.paused) audio.play(); else audio.pause(); } catch (e) {} }
+
+    segs.forEach(function (s) {
+      // arrastar / clicar a barra do topico -> busca DENTRO daquele trecho (e passa a ser o atual)
+      var dragging = false;
+      function seekAt(clientX) {
+        if (!s.track) return;
+        var r = s.track.getBoundingClientRect();
+        var frac = Math.max(0, Math.min(1, (clientX - r.left) / Math.max(1, r.width)));
+        try { audio.currentTime = s.start + frac * (segEnd(s.i) - s.start); if (audio.paused) audio.play(); } catch (e) {}
       }
-      if (progDirty) { clearTimeout(progTmr); progTmr = setTimeout(saveProg, 4000); }
+      if (s.track) {
+        s.track.addEventListener("pointerdown", function (e) {
+          e.stopPropagation(); dragging = true; try { s.track.setPointerCapture(e.pointerId); } catch (x) {} seekAt(e.clientX);
+        });
+        s.track.addEventListener("pointermove", function (e) { if (dragging) { e.preventDefault(); seekAt(e.clientX); } });
+        var stop = function (e) { dragging = false; try { s.track.releasePointerCapture(e.pointerId); } catch (x) {} };
+        s.track.addEventListener("pointerup", stop);
+        s.track.addEventListener("pointercancel", stop);
+      }
+      // clique na linha: topico atual -> pausa/toca; outro -> vai pra ele (contiguo)
+      s.li.querySelector(".bl-row").addEventListener("click", function (e) {
+        if (e.target.closest(".bl-note-btn") || e.target.closest(".bl-jump") || e.target.closest(".bl-track")) return;
+        if (s.li.classList.contains("on")) toggle(); else playSeg(s.i);
+      });
+      // o tempo (chip) (re)inicia aquele topico
+      s.li.querySelector(".bl-jump").addEventListener("click", function (e) { e.stopPropagation(); playSeg(s.i); });
+    });
+
+    // ---- resume: continua de onde parou (posicao global salva por episodio) ----
+    var savedPos = (state.progress && typeof state.progress[ep.id] === "number") ? state.progress[ep.id] : 0;
+    if (savedPos > 3) {
+      var applyResume = function () { try { if (savedPos < (audio.duration || 1e9) - 2) audio.currentTime = savedPos; } catch (e) {} };
+      if (audio.readyState >= 1) applyResume(); else audio.addEventListener("loadedmetadata", applyResume, { once: true });
+    }
+    var posTmr = null;
+    function savePos() {
+      if (!state.progress) state.progress = {};
+      state.progress[ep.id] = Math.floor(audio.currentTime || 0);
+      apiPost("progress", { key: ep.id, pos: state.progress[ep.id] }).catch(function () {});
     }
 
-    // ---- sincronizacao com o audio ----
-    var lastIdx = -1;
+    // ---- sincronizacao: so o topico ATUAL mostra a barra viva; os outros ficam vazios ----
     function refresh() {
       var t = audio.currentTime || 0, dur = audio.duration || 0;
       if (barFill && dur) barFill.style.width = (t / dur * 100) + "%";
       if (timeEl) timeEl.textContent = mmss(t) + " / " + mmss(dur || 0);
-      updateFills(t);   // barra propria de cada topico, todo tick
-      // bullet atual = ultimo cujo sec <= t
-      var idx = -1;
-      for (var i = 0; i < bls.length; i++) { if ((parseFloat(bls[i].dataset.sec) || 0) <= t + 0.25) idx = i; else break; }
-      if (idx === lastIdx) return;
-      lastIdx = idx;
-      bls.forEach(function (li, i) {
-        li.classList.toggle("on", i === idx);
-        li.classList.toggle("played", i < idx);
+      var idx = activeIndex(t);
+      segs.forEach(function (s) {
+        var on = s.i === idx;
+        s.li.classList.toggle("on", on);
+        if (s.fill) {
+          if (on) {
+            var f = Math.max(0, Math.min(1, (t - s.start) / Math.max(1, segEnd(s.i) - s.start)));
+            s.fill.style.width = (f * 100) + "%";
+          } else {
+            s.fill.style.width = "0%";
+          }
+        }
       });
-      // acende o capitulo no nav
       if (idx >= 0 && chips.length) {
         var capOf = bls[idx].dataset.cap;
         chips.forEach(function (ch) { ch.classList.toggle("on", ch.dataset.cap === capOf); });
       }
-      // auto-scroll suave so quando esta tocando
       if (idx >= 0 && !audio.paused) bls[idx].scrollIntoView({ behavior: "smooth", block: "center" });
     }
-    audio.addEventListener("timeupdate", refresh);
+    audio.addEventListener("timeupdate", function () { refresh(); clearTimeout(posTmr); posTmr = setTimeout(savePos, 4000); });
     audio.addEventListener("loadedmetadata", refresh);
     audio.addEventListener("play", refresh);
-    audio.addEventListener("pause", saveProg);
-    audio.addEventListener("ended", saveProg);
+    audio.addEventListener("pause", function () { refresh(); savePos(); });
+    audio.addEventListener("ended", savePos);
   }
 
   /* ---------- modo ---------- */

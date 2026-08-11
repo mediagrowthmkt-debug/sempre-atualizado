@@ -247,21 +247,13 @@ if (in_array($action, ['mark', 'bulk', 'note', 'progress'], true)) {
   }
 
   if ($action === 'progress') {
-    // progresso de escuta por topico de um episodio: map { blKey: fracao 0..1 }
+    // posicao de escuta (segundos) por episodio -> retomar de onde parou
     $key = clip($_POST['key'] ?? '', 80);          // id do episodio
-    $raw = $_POST['map'] ?? '';
     if ($key === '') $abort('key vazia');
-    $m = json_decode(is_string($raw) ? $raw : '', true);
-    if (!is_array($m)) $abort('map invalido');
-    $clean = []; $i = 0;
-    foreach ($m as $k => $v) {
-      if ($i++ >= 400) break;
-      $k = mb_substr((string)$k, 0, 80);
-      $v = (float)$v;
-      if ($v < 0) $v = 0; if ($v > 1) $v = 1;
-      $clean[$k] = round($v, 4);
-    }
-    $st['progress'][$key] = $clean;
+    $pos = (float)($_POST['pos'] ?? 0);
+    if ($pos < 0) $pos = 0;
+    if ($pos > 100000) $pos = 100000;
+    $st['progress'][$key] = round($pos, 1);
     $commit();
   }
 }

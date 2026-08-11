@@ -302,10 +302,11 @@ a:hover{color:var(--gold);text-decoration:underline;text-underline-offset:2px}
 .bl.on .bl-jump{border-color:var(--gold);background:var(--gold-soft)}
 .bl.played .bl-jump{color:var(--mut-2)}
 
-/* barra de progresso PROPRIA de cada topico (enche conforme voce ouve; salva onde parou) */
-.bl-track{height:3px;background:var(--line);border-radius:999px;margin:2px 12px 10px 62px;overflow:hidden;opacity:.65;transition:opacity .18s}
-.bl-track>.bl-fill{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--gold-3),var(--gold-2));border-radius:999px;transition:width .18s linear}
-.bl.on .bl-track{opacity:1;height:4px}
+/* barra de cada topico = mini-player daquele trecho (arrastavel; so o atual mostra posicao) */
+.bl-track{height:5px;background:var(--line);border-radius:999px;margin:2px 12px 12px 62px;overflow:hidden;opacity:.6;cursor:pointer;touch-action:none;transition:opacity .18s,height .18s}
+.bl-track:hover{opacity:1;height:8px}
+.bl-track>.bl-fill{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--gold-3),var(--gold-2));border-radius:999px;transition:width .1s linear}
+.bl.on .bl-track{opacity:1;height:9px;background:rgba(212,175,55,.16)}
 .bl.on .bl-track>.bl-fill{box-shadow:0 0 8px rgba(212,175,55,.5)}
 
 /* nota inline (escondida ate anotar) */
