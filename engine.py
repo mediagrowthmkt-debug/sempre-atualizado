@@ -27,7 +27,8 @@ Uso:
   engine.py gerar-texto [--status checked|all|novos] [--out arq]   # monta o texto em capitulos
   engine.py materias [--cat id1,id2]                               # gera materias/<id>.html (curadoria por assunto, pro NotebookLM)
   engine.py audio-prompt [--status checked]                        # texto pro campo "Personalizar o Resumo em Áudio" do NotebookLM
-  engine.py estudo --audio arq.m4a --file payload.json [--data YYYY-MM-DD] [--titulo "..."] [--publicar]  # cria/ADICIONA o estudo do podcast (hospeda audio + topicos com timestamp)
+  engine.py estudo --audio arq.m4a --file payload.json [--data YYYY-MM-DD] [--titulo "..."] [--publicar]  # cria/ADICIONA o estudo do podcast (hospeda audio + topicos com timestamp; ao enviar audio, os SELECIONADOS viram JA USADO)
+  engine.py arquivar-selecionados                                 # move os SELECIONADOS ('checked') pra JA USADO ('read'), limpando os selecionados
   engine.py publicar [-m "msg"]                                    # materias + pagina (Hostinger) + conteudo (privado) + backup git
   engine.py deploy-frontend                                        # so a pagina -> Hostinger
   engine.py push-content                                           # so o conteudo -> dir privado
@@ -425,6 +426,50 @@ def backend_state():
         return {}
 
 
+def arquivar_selecionados_backend(verbose=True):
+    """Move todo item SELECIONADO ('checked') pra JA USADO ('read') no estado do backend, via SSH.
+       Limpa os selecionados pra nao poluir. Chamado automaticamente ao criar um estudo a partir de audio
+       (os assuntos ja foram consumidos pra gerar o Resumo em Audio). Preserva notas/progresso.
+       Retorna quantos itens foram movidos."""
+    remote = f"{PRIV_REMOTE}/state/{USER}.json"
+    try:
+        r = subprocess.run(
+            ["ssh", "-o", "ConnectTimeout=15", SSH, f"cat {remote} 2>/dev/null || echo '{{}}'"],
+            capture_output=True, text=True)
+        st = json.loads(r.stdout or "{}")
+    except Exception as e:
+        print(f"⚠️  não consegui ler o estado pra arquivar os selecionados ({e}).")
+        return 0
+    if not isinstance(st, dict):
+        st = {}
+    dec = st.get("decisions") or {}
+    ids = [i for i, d in dec.items() if isinstance(d, dict) and d.get("status") == "checked"]
+    if not ids:
+        if verbose:
+            print("ℹ️  nenhum selecionado pra arquivar (os selecionados já estão limpos).")
+        return 0
+    at = now_iso()
+    for i in ids:
+        dec[i] = {"status": "read", "at": at}
+    st["decisions"] = dec
+    st["updated_at"] = at
+    payload = json.dumps(st, ensure_ascii=False, indent=2)
+    try:
+        w = subprocess.run(
+            ["ssh", "-o", "ConnectTimeout=20", SSH,
+             f"cat > {remote}.tmp && mv -f {remote}.tmp {remote} && chmod 600 {remote} && echo OK"],
+            input=payload, capture_output=True, text=True)
+        if "OK" not in (w.stdout or ""):
+            print(f"⚠️  falha ao gravar o estado arquivado: {(w.stderr or '').strip()}")
+            return 0
+    except Exception as e:
+        print(f"⚠️  não consegui gravar o estado arquivado ({e}).")
+        return 0
+    if verbose:
+        print(f"📁 {len(ids)} selecionado(s) movido(s) pra 'já usado' (arquivados) — selecionados limpos.")
+    return len(ids)
+
+
 # ---------------------------------------------------------------- gerar texto em capitulos
 def cmd_gerar_texto(status="checked", out=None):
     cfg = load_cfg()
@@ -667,6 +712,10 @@ def cmd_estudo(audio, payload_path, data=None, titulo=None, publicar=False):
     os.makedirs(os.path.dirname(ESTUDOS), exist_ok=True)
     json.dump(est, open(ESTUDOS, "w", encoding="utf-8"), ensure_ascii=False, indent=2)
     print(f"✅ Episódio '{titulo}' ({data}) gravado: {len(ep['topicos'])} tópicos.")
+    # Audio novo enviado => os assuntos selecionados ja foram usados pra gerar o Resumo em Audio:
+    # move os SELECIONADOS ('checked') pra JA USADO ('read'), limpando os selecionados pra nao poluir.
+    if audio and os.path.exists(audio):
+        arquivar_selecionados_backend()
     if publicar:
         cmd_publicar(f"estudo: {titulo} ({data})")
 
@@ -844,6 +893,8 @@ def main():
     elif c == "estudo":
         cmd_estudo(arg("--audio"), arg("--file"), data=arg("--data"),
                    titulo=arg("--titulo"), publicar="--publicar" in a)
+    elif c == "arquivar-selecionados":
+        arquivar_selecionados_backend()
     elif c == "publicar":
         cmd_publicar(arg("-m"))
     elif c == "deploy-frontend":

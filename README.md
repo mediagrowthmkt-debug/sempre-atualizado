@@ -38,5 +38,7 @@ python3 engine.py publicar                    # sobe pagina + conteudo
 ## Estudo do podcast
 Manda o áudio (Resumo em Áudio do NotebookLM) → transcreve (Whisper) → o agente monta os tópicos com timestamp → `engine.py estudo --audio ... --file ... --titulo "Título PT" --publicar`. Cada áudio vira **um estudo novo** (agrupados por dia no grid). O reader toca o áudio com **barra de progresso**, o **tópico atual acende** conforme anda, e dá pra **anotar por tópico** (nota escondida até você escrever).
 
+**Ao enviar áudio pra criar o estudo, os SELECIONADOS viram JA USADO automaticamente.** Como aquele áudio foi gerado a partir dos assuntos que o Bruno marcou (selecionados → texto → NotebookLM → áudio), esses assuntos já foram consumidos. Então o `estudo --audio ...` move todo item com status `checked` (selecionado) pra `read` (já usado/arquivado) no estado do backend, **limpando o contador de SELECIONADOS pra não poluir**. Preserva notas e progresso. Pra rodar avulso: `engine.py arquivar-selecionados`.
+
 ## Estados de um item
 `pending` (novo) · `checked` (selecionado pro texto) · `read` (arquivado/já li). Chaveado por **ID estável do item** → o que o Bruno marca sobrevive à recoleta.
