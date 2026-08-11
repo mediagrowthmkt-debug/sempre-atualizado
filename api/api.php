@@ -83,16 +83,21 @@ function verify_token($tok, $secret) {
   if (!is_array($data) || (int)($data['exp'] ?? 0) < time()) return null;
   return $data;
 }
-function is_https() {
-  return (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
-      || (($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https')
-      || ((int)($_SERVER['SERVER_PORT'] ?? 0) === 443);
+function cookie_secure() {
+  // https detectado direto OU por proxy; em producao (dominio real) forca Secure.
+  // So libera cookie inseguro em localhost (testes locais via http).
+  $https = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
+        || (($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https')
+        || ((int)($_SERVER['SERVER_PORT'] ?? 0) === 443);
+  $host = strtolower($_SERVER['HTTP_HOST'] ?? '');
+  $local = ($host === '' || strpos($host, 'localhost') === 0 || strpos($host, '127.0.0.1') === 0);
+  return $https || !$local;
 }
 function set_session_cookie($tok, $ttl) {
   setcookie('sa_session', $tok, [
     'expires'  => time() + $ttl,
     'path'     => '/',
-    'secure'   => is_https(),
+    'secure'   => cookie_secure(),
     'httponly' => true,
     'samesite' => 'Strict',
   ]);
@@ -101,7 +106,7 @@ function clear_session_cookie() {
   setcookie('sa_session', '', [
     'expires'  => time() - 3600,
     'path'     => '/',
-    'secure'   => is_https(),
+    'secure'   => cookie_secure(),
     'httponly' => true,
     'samesite' => 'Strict',
   ]);
