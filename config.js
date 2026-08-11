@@ -1,4 +1,5 @@
-/* Endpoint do backend (Hostinger). Guarda o que o Bruno marca, por slug. */
+/* Backend do Sempre Atualizado. Fica no MESMO dominio da pagina (Hostinger),
+   entao a sessao usa cookie HttpOnly e o caminho e relativo (sem CORS). */
 window.SA_CONFIG = {
-  apiBase: "https://mediagrowth.com.br/atualizado-api/api.php"
+  apiBase: "../atualizado-api/api.php"
 };

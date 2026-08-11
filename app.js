@@ -1,20 +1,20 @@
 /* SEMPRE ATUALIZADO — pessoal do Bruno.
-   Pagina estatica (GitHub Pages): le categorias.json + dados/<slug>.json (banco acumulado)
-   e sincroniza as MARCACOES com api.php (backend por slug na Hostinger).
-   Marcacoes chaveadas pelo ID do item -> o que voce marca sobrevive a recoleta diaria. */
+   Roda no MESMO dominio do backend (Hostinger). Sessao por cookie HttpOnly:
+   - action=me        -> ja logado?
+   - action=login     -> entra (seta cookie)
+   - action=data      -> conteudo curado (categorias + radar + estudos), so logado
+   - action=get/mark/note/bulk -> estado (marcacoes + notas), so logado
+   Writes mandam o header X-SA-App:1 (guarda anti-CSRF, junto do cookie SameSite=Strict). */
 (function () {
   "use strict";
-  var API = (window.SA_CONFIG && window.SA_CONFIG.apiBase) || "";
+  var API = (window.SA_CONFIG && window.SA_CONFIG.apiBase) || "../atualizado-api/api.php";
   var params = new URLSearchParams(location.search);
-  var SLUG = (params.get("u") || params.get("slug") || "bruno").toLowerCase().replace(/[^a-z0-9\-]/g, "");
+  var SLUG = "bruno";
 
-  var CFG = null, DADOS = null, ESTUDOS = { episodios: [] };
+  var CFG = null, DADOS = { itens: [], gerado_em: "" }, ESTUDOS = { episodios: [] };
   var state = { decisions: {}, notes: {} };
-  var appMode = "radar";   // radar | estudo
-  var view = "novos";      // novos | sel | todos | lidos
-  var group = "all";       // all | negocios | pessoal
-  var q = "";
-  var catMap = {}, grpMap = {};
+  var appMode = "radar", view = "novos", group = "all", q = "";
+  var catMap = {}, grpMap = {}, booted = false;
 
   var $ = function (id) { return document.getElementById(id); };
   function esc(s) {
@@ -22,20 +22,44 @@
       return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
     });
   }
+  function norm(x) { return (x && typeof x === "object" && !Array.isArray(x)) ? x : {}; }
   function toast(m) { var t = $("toast"); t.textContent = m; t.classList.add("show"); setTimeout(function () { t.classList.remove("show"); }, 2400); }
+  function two(n) { n = Math.floor(n); return (n < 10 ? "0" : "") + n; }
+  function mmss(sec) { sec = Math.max(0, sec || 0); return two(sec / 60) + ":" + two(sec % 60); }
 
   /* ---------- rede ---------- */
-  function apiGet() {
-    if (!API) return Promise.resolve({ decisions: {} });
-    return fetch(API + "?action=get&slug=" + encodeURIComponent(SLUG), { cache: "no-store" })
-      .then(function (r) { return r.json(); }).catch(function () { return { decisions: {} }; });
+  function apiGet(action, extra) {
+    return fetch(API + "?action=" + encodeURIComponent(action) + (extra || ""), { cache: "no-store", credentials: "same-origin" });
   }
-  function post(action, data) {
-    var body = new URLSearchParams();
-    body.set("action", action); body.set("slug", SLUG);
-    Object.keys(data).forEach(function (k) { body.set(k, data[k] == null ? "" : data[k]); });
-    return fetch(API, { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: body.toString() })
-      .then(function (r) { return r.json(); });
+  function apiPost(action, data) {
+    var body = new URLSearchParams(); body.set("action", action);
+    Object.keys(data || {}).forEach(function (k) { body.set(k, data[k] == null ? "" : data[k]); });
+    return fetch(API, {
+      method: "POST", credentials: "same-origin",
+      headers: { "Content-Type": "application/x-www-form-urlencoded", "X-SA-App": "1" },
+      body: body.toString()
+    });
+  }
+  function okJson(r) { if (r.status === 401) { showGate(); throw { auth: false }; } return r.json(); }
+
+  /* ---------- auth ---------- */
+  function showGate() { $("gate").style.display = "flex"; $("app").style.display = "none"; setTimeout(function () { var p = $("gate-pass"); if (p) p.focus(); }, 60); }
+  function showApp() { $("gate").style.display = "none"; $("app").style.display = ""; }
+
+  function wireGate() {
+    $("gate-form").addEventListener("submit", function (e) {
+      e.preventDefault();
+      var pass = $("gate-pass").value, btn = $("gate-btn"), err = $("gate-err");
+      if (!pass) return;
+      btn.disabled = true; btn.textContent = "Entrando…"; err.textContent = "";
+      apiPost("login", { password: pass })
+        .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+        .then(function (res) {
+          if (res.ok && res.j && res.j.ok) { $("gate-pass").value = ""; boot(); }
+          else { err.textContent = (res.j && res.j.erro && /tentativas/.test(res.j.erro)) ? "Muitas tentativas. Aguarde uns minutos." : "Senha incorreta."; btn.disabled = false; btn.textContent = "Entrar"; $("gate-pass").select(); }
+        })
+        .catch(function () { err.textContent = "Erro de conexão."; btn.disabled = false; btn.textContent = "Entrar"; });
+    });
   }
 
   /* ---------- estado ---------- */
@@ -43,8 +67,8 @@
   function setStatus(id, status) {
     if (status === "pending") delete state.decisions[id];
     else state.decisions[id] = { status: status };
-    post("mark", { id: id, status: status })
-      .then(function () { if (status !== "read") toast(status === "checked" ? "Selecionado, salvo ✓" : "Desmarcado, salvo ✓"); })
+    apiPost("mark", { id: id, status: status })
+      .then(function (r) { if (r.status === 401) return showGate(); if (status !== "read") toast(status === "checked" ? "Selecionado, salvo ✓" : "Desmarcado, salvo ✓"); })
       .catch(function () { toast("Não consegui salvar. Verifique a conexão."); });
   }
 
@@ -54,7 +78,7 @@
     if (view === "novos") return s === "pending";
     if (view === "sel") return s === "checked";
     if (view === "lidos") return s === "read";
-    return s !== "read"; // todos = ativos (novos + selecionados)
+    return s !== "read";
   }
   function passGroup(cat) { return group === "all" || (catMap[cat] && catMap[cat].grupo === group); }
   function passQ(it) {
@@ -78,7 +102,7 @@
     return { novos: novos, sel: sel, tot: tot, perCat: perCat };
   }
 
-  /* ---------- render ---------- */
+  /* ---------- render radar ---------- */
   function renderStats() {
     var c = counts();
     $("s-novos").textContent = c.novos;
@@ -90,13 +114,12 @@
     $("btn-gerar").disabled = c.sel === 0;
     return c;
   }
-
   function renderSide(perCat) {
     var el = $("sidelist"); el.innerHTML = "";
-    CFG.grupos.forEach(function (g) {
+    (CFG.grupos || []).forEach(function (g) {
       var gh = document.createElement("div"); gh.className = "side-grp";
       gh.textContent = g.emoji + " " + g.nome; el.appendChild(gh);
-      CFG.categorias.filter(function (c) { return c.grupo === g.id; }).forEach(function (c) {
+      (CFG.categorias || []).filter(function (c) { return c.grupo === g.id; }).forEach(function (c) {
         var n = perCat[c.id] || 0;
         var row = document.createElement("div"); row.className = "side-cat";
         row.innerHTML = '<span class="em">' + c.emoji + '</span><span class="nm">' + esc(c.nome) + '</span>'
@@ -111,7 +134,6 @@
       });
     });
   }
-
   function card(it) {
     var s = statusOf(it.id);
     var d = document.createElement("div");
@@ -137,14 +159,9 @@
       d.classList.toggle("checked", e.target.checked);
       renderStats();
     };
-    d.querySelector(".arch").onclick = function () {
-      setStatus(it.id, "read");
-      toast("Arquivado 📁");
-      render();
-    };
+    d.querySelector(".arch").onclick = function () { setStatus(it.id, "read"); toast("Arquivado 📁"); render(); };
     return d;
   }
-
   function render() {
     var perCat = renderStats().perCat;
     renderSide(perCat);
@@ -152,12 +169,12 @@
     var items = visibleItems();
     if (!items.length) {
       feed.innerHTML = '<div class="empty"><b>Nada por aqui nesse filtro.</b>' +
-        (view === "novos" ? "Rode a skill pra trazer assuntos novos, ou veja os <b style=\"display:inline;color:#6366f1;cursor:pointer\" onclick=\"document.querySelector('[data-f=todos]').click()\">Todos</b>." : "Troque o filtro acima.") + '</div>';
+        (view === "novos" ? "Rode a skill pra trazer assuntos novos, ou veja <a href=\"javascript:void(0)\" onclick=\"document.querySelector('[data-f=todos]').click()\">Todos</a>." : "Troque o filtro acima.") + '</div>';
       return;
     }
     var byCat = {};
     items.forEach(function (it) { (byCat[it.cat] = byCat[it.cat] || []).push(it); });
-    CFG.categorias.forEach(function (c) {
+    (CFG.categorias || []).forEach(function (c) {
       var arr = byCat[c.id]; if (!arr || !arr.length) return;
       arr.sort(function (a, b) { return (b.data || "").localeCompare(a.data || ""); });
       var sec = document.createElement("section"); sec.className = "catsec"; sec.id = "sec-" + c.id;
@@ -169,89 +186,233 @@
     });
   }
 
-  /* ---------- estudo do podcast ---------- */
-  function fmtData(s) {
+  /* ==================== ESTUDO ==================== */
+  function fmtDia(s) {
     if (!s) return "";
     var p = String(s).split("-");
-    return p.length === 3 ? p[2] + "/" + p[1] + "/" + p[0] : s;
+    if (p.length !== 3) return s;
+    var d = new Date(+p[0], +p[1] - 1, +p[2]);
+    var txt = d.toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long" });
+    return txt.charAt(0).toUpperCase() + txt.slice(1);
   }
+  function fmtHora(iso) {
+    if (!iso) return "";
+    try { var d = new Date(iso); return d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }); } catch (e) { return ""; }
+  }
+  function epNoteKey(epId, tp, idx) { return epId + ":" + (tp.sec != null ? tp.sec : "i" + idx); }
   function saveNote(key, text) {
     if (!state.notes) state.notes = {};
     if (text) state.notes[key] = { text: text }; else delete state.notes[key];
-    post("note", { key: key, text: text }).catch(function () { toast("Sem conexão pra salvar a nota"); });
+    apiPost("note", { key: key, text: text }).then(function (r) { if (r.status === 401) showGate(); }).catch(function () { toast("Sem conexão pra salvar a nota"); });
   }
-  function flashMini(el) { el.classList.add("just-saved"); setTimeout(function () { el.classList.remove("just-saved"); }, 1200); }
-  function topKey(epId, tp, idx) { return epId + ":" + (tp.sec != null ? tp.sec : "i" + idx); }
 
-  function renderEstudo() {
-    var feed = $("estudoFeed"); feed.innerHTML = "";
-    var eps = ESTUDOS.episodios || [];
+  /* ---- grid de blocos, agrupado por dia ---- */
+  function renderEstudoGrid() {
+    $("estudoIntro").style.display = "";
+    $("estudoReader").style.display = "none";
+    var grid = $("estudoGrid"); grid.style.display = ""; grid.innerHTML = "";
+    var eps = (ESTUDOS.episodios || []).slice();
     if (!eps.length) {
-      feed.innerHTML = '<div class="empty"><b>Nenhum podcast de estudo ainda.</b>Gere o Resumo em Áudio no NotebookLM e me mande o arquivo. Eu transcrevo, monto os tópicos com o tempo e crio o estudo aqui.</div>';
+      grid.innerHTML = '<div class="daygroup"><div class="empty"><b>Nenhum estudo ainda.</b>' +
+        'Gere o Resumo em Áudio no NotebookLM, me mande o arquivo e eu transcrevo, monto os tópicos com o tempo e crio o estudo aqui.</div></div>';
       return;
     }
-    eps.forEach(function (ep) {
-      var sec = document.createElement("section"); sec.className = "ep";
-      var temas = (ep.temas || []).map(function (t) { return '<span class="ep-tema">' + esc(t) + "</span>"; }).join("");
-      // topicos agrupados por capitulo, com tag e anotacao em cada
-      var tops = ep.topicos || [], html = "", curCap = null;
-      tops.forEach(function (tp, idx) {
-        var cap = tp.cap || "";
-        if (cap !== curCap) {
-          if (curCap !== null) html += "</ul>";
-          curCap = cap;
-          html += '<div class="ep-cap">' + esc(cap || "Tópicos") + "</div><ul class=\"ep-bullets\">";
-        }
-        var key = topKey(ep.id, tp, idx);
-        var noteVal = (state.notes && state.notes[key] && state.notes[key].text) || "";
-        var tag = tp.tag ? '<span class="btag">' + esc(tp.tag) + "</span>" : "";
-        html +=
-          "<li>" +
-            '<div class="bl-main" data-sec="' + (tp.sec || 0) + '" title="Clique pra ouvir este trecho">' +
-              '<span class="ts">' + esc(tp.t || "") + "</span>" +
-              '<div class="bl-body"><span class="bx">' + esc(tp.txt || "") + "</span>" + tag + "</div>" +
-            "</div>" +
-            '<textarea class="bl-note" data-key="' + esc(key) + '" placeholder="✍️ anotar neste tópico…">' + esc(noteVal) + "</textarea>" +
-          "</li>";
-      });
-      if (curCap !== null) html += "</ul>";
-      if (!html) html = '<div class="ep-noaudio">Sem tópicos.</div>';
-
-      var epNoteVal = (state.notes && state.notes[ep.id] && state.notes[ep.id].text) || "";
-      sec.innerHTML =
-        '<div class="ep-head"><span class="ep-date">' + esc(fmtData(ep.data)) + (ep.duracao ? " · " + esc(ep.duracao) : "") + "</span>" +
-          "<h2>" + esc(ep.titulo) + "</h2></div>" +
-        (temas ? '<div class="ep-temas">' + temas + "</div>" : "") +
-        (ep.audio_url ? '<audio class="ep-audio" controls preload="none" src="' + esc(ep.audio_url) + '"></audio>' : '<div class="ep-noaudio">Áudio não anexado.</div>') +
-        '<h3>📌 Capítulos e tópicos <small>(clique no tempo pra ouvir; escreva sua anotação em cada tópico)</small></h3>' +
-        html +
-        "<h3>📝 Notas gerais do episódio</h3>" +
-        '<textarea class="ep-notes" placeholder="Anotações gerais deste episódio…">' + esc(epNoteVal) + "</textarea>" +
-        '<div class="ep-notesaved">salvo ✓</div>' +
-        (ep.transcricao ? '<details class="ep-tr"><summary>Ver transcrição completa</summary><div class="ep-tr-body">' + esc(ep.transcricao) + "</div></details>" : "");
-
-      var audio = sec.querySelector(".ep-audio");
-      [].forEach.call(sec.querySelectorAll(".bl-main"), function (m) {
-        m.onclick = function () { if (audio) { try { audio.currentTime = parseFloat(m.dataset.sec) || 0; audio.play(); } catch (e) {} } };
-      });
-      [].forEach.call(sec.querySelectorAll(".bl-note"), function (na) {
-        var tmr = null;
-        na.addEventListener("input", function () {
-          clearTimeout(tmr);
-          tmr = setTimeout(function () { saveNote(na.dataset.key, na.value); flashMini(na); }, 700);
-        });
-      });
-      var ta = sec.querySelector(".ep-notes"), tmr2 = null, saved = sec.querySelector(".ep-notesaved");
-      ta.addEventListener("input", function () {
-        clearTimeout(tmr2);
-        tmr2 = setTimeout(function () {
-          saveNote(ep.id, ta.value);
-          if (saved) { saved.classList.add("on"); setTimeout(function () { saved.classList.remove("on"); }, 1500); }
-        }, 700);
-      });
-      feed.appendChild(sec);
+    eps.sort(function (a, b) {
+      var c = (b.data || "").localeCompare(a.data || "");
+      return c !== 0 ? c : (b.criado_em || "").localeCompare(a.criado_em || "");
+    });
+    var byDay = {}, ordem = [];
+    eps.forEach(function (ep) { if (!byDay[ep.data]) { byDay[ep.data] = []; ordem.push(ep.data); } byDay[ep.data].push(ep); });
+    ordem.forEach(function (dia) {
+      var dg = document.createElement("div"); dg.className = "daygroup";
+      var blocks = byDay[dia].map(function (ep) {
+        var tags = (ep.temas || []).slice(0, 4).map(function (t) { return '<span class="eb-tag">' + esc(t) + '</span>'; }).join("");
+        var hora = fmtHora(ep.criado_em);
+        var pdata = String(ep.data || "").split("-");
+        var dm = pdata.length === 3 ? pdata[2] + "/" + pdata[1] : (ep.data || "");
+        return '<button class="ep-block" data-id="' + esc(ep.id) + '">' +
+          '<span class="eb-date"><span class="dot"></span>' + esc(dm) + (hora ? " · " + esc(hora) : "") + '</span>' +
+          '<h3 class="eb-title">' + esc(ep.titulo) + '</h3>' +
+          '<div class="eb-tags">' + tags + '</div>' +
+          '<div class="eb-foot"><span class="play">▷</span> ouvir e estudar' + (ep.duracao ? ' · ' + esc(ep.duracao) : '') + '</div>' +
+          '</button>';
+      }).join("");
+      dg.innerHTML = '<div class="day-h">' + esc(fmtDia(dia)) + '</div><div class="blocks">' + blocks + '</div>';
+      grid.appendChild(dg);
+    });
+    [].forEach.call(grid.querySelectorAll(".ep-block"), function (b) {
+      b.onclick = function () {
+        var ep = (ESTUDOS.episodios || []).filter(function (e) { return e.id === b.dataset.id; })[0];
+        if (ep) openReader(ep);
+      };
     });
   }
+
+  /* ---- reader: player sincronizado + notas inline ---- */
+  function capNum(cap, fallback) { var m = /^\s*(\d+)/.exec(cap || ""); return m ? m[1] : String(fallback); }
+
+  function openReader(ep) {
+    $("estudoIntro").style.display = "none";
+    $("estudoGrid").style.display = "none";
+    var rd = $("estudoReader"); rd.style.display = ""; window.scrollTo(0, 0);
+
+    var tops = ep.topicos || [];
+    var temas = (ep.temas || []).map(function (t) { return '<span class="rd-tema">' + esc(t) + '</span>'; }).join("");
+    var pdata = String(ep.data || "").split("-");
+    var dm = pdata.length === 3 ? pdata[2] + "/" + pdata[1] + "/" + pdata[0] : (ep.data || "");
+    var hora = fmtHora(ep.criado_em);
+
+    // capitulos + navegacao
+    var caps = [], seen = {};
+    tops.forEach(function (tp) { var c = tp.cap || "Tópicos"; if (!seen[c]) { seen[c] = true; caps.push(c); } });
+    var chapnav = caps.length > 1 ? '<div class="rd-chapnav">' + caps.map(function (c, i) {
+      return '<button class="rd-chap-chip" data-cap="' + i + '">' + esc(c) + '</button>';
+    }).join("") + '</div>' : "";
+
+    // bullets por capitulo
+    var html = "", curCap = null, capIdx = -1;
+    tops.forEach(function (tp, idx) {
+      var cap = tp.cap || "Tópicos";
+      if (cap !== curCap) {
+        if (curCap !== null) html += "</ul>";
+        curCap = cap; capIdx++;
+        html += '<div class="rd-cap" id="cap-' + capIdx + '"><span class="cap-n">' + esc(capNum(cap, capIdx + 1)) + '</span>' + esc(cap.replace(/^\s*\d+\.?\s*/, "")) + '</div><ul class="rd-bullets">';
+      }
+      var key = epNoteKey(ep.id, tp, idx);
+      var noteVal = (state.notes && state.notes[key] && state.notes[key].text) || "";
+      var hasNote = !!noteVal;
+      var tag = tp.tag ? '<span class="bl-tag">' + esc(tp.tag) + '</span>' : "";
+      html +=
+        '<li class="bl" data-sec="' + (tp.sec || 0) + '" data-cap="' + capIdx + '" data-idx="' + idx + '">' +
+          '<span class="bl-prog"></span>' +
+          '<div class="bl-row">' +
+            '<button class="bl-jump" title="Ouvir este trecho">' + esc(tp.t || mmss(tp.sec || 0)) + '</button>' +
+            '<div class="bl-body"><p class="bl-txt">' + esc(tp.txt || "") + '</p>' + tag + '</div>' +
+            '<button class="bl-note-btn' + (hasNote ? ' has' : '') + '" title="Anotar neste tópico">✎</button>' +
+          '</div>' +
+          '<textarea class="bl-note' + (hasNote ? ' show' : '') + '" data-key="' + esc(key) + '" placeholder="Sua anotação neste tópico…">' + esc(noteVal) + '</textarea>' +
+        '</li>';
+    });
+    if (curCap !== null) html += "</ul>";
+    if (!html) html = '<div class="rd-noaudio">Sem tópicos.</div>';
+
+    var epNoteVal = (state.notes && state.notes[ep.id] && state.notes[ep.id].text) || "";
+    var player = ep.audio_url
+      ? '<div class="rd-player">' +
+          '<audio id="rd-audio" controls preload="none" src="' + esc(ep.audio_url) + '"></audio>' +
+          '<div class="rd-progress"><div class="rd-bar" id="rd-bar"><i></i></div><span class="rd-time" id="rd-time">00:00 / 00:00</span></div>' +
+          '<div class="rd-hint">◆ O tópico atual acende conforme o áudio anda. Toque no tempo pra pular. Anote no ✎.</div>' +
+        '</div>'
+      : '<div class="rd-player"><div class="rd-noaudio">Áudio não anexado neste estudo.</div></div>';
+
+    rd.innerHTML =
+      '<button class="rd-back" id="rd-back">← Voltar aos estudos</button>' +
+      '<div class="rd-date">' + esc(dm) + (hora ? " · " + esc(hora) : "") + (ep.duracao ? " · " + esc(ep.duracao) : "") + '</div>' +
+      '<h1 class="rd-title">' + esc(ep.titulo) + '</h1>' +
+      (temas ? '<div class="rd-temas">' + temas + '</div>' : "") +
+      player + chapnav +
+      '<div id="rd-list">' + html + '</div>' +
+      '<div class="rd-generalnote"><h3>📝 Notas gerais do estudo</h3>' +
+        '<textarea class="ep-notes" id="rd-generalnote" placeholder="Anotações gerais deste estudo…">' + esc(epNoteVal) + '</textarea>' +
+        '<div class="ep-notesaved" id="rd-generalsaved">salvo ✓</div></div>' +
+      (ep.transcricao ? '<details class="rd-tr"><summary>Ver transcrição completa</summary><div class="rd-tr-body">' + esc(ep.transcricao) + '</div></details>' : "");
+
+    wireReader(rd, ep, tops);
+  }
+
+  function wireReader(rd, ep, tops) {
+    $("rd-back").onclick = function () { renderEstudoGrid(); window.scrollTo(0, 0); };
+
+    var bls = [].slice.call(rd.querySelectorAll(".bl"));
+    var audio = rd.querySelector("#rd-audio");
+    var bar = rd.querySelector("#rd-bar"), barFill = bar ? bar.querySelector("i") : null;
+    var timeEl = rd.querySelector("#rd-time");
+    var chips = [].slice.call(rd.querySelectorAll(".rd-chap-chip"));
+
+    // pular pro trecho (clique no tempo ou na linha)
+    bls.forEach(function (li) {
+      var sec = parseFloat(li.dataset.sec) || 0;
+      var go = function () { if (audio) { try { audio.currentTime = sec; audio.play(); } catch (e) {} } };
+      li.querySelector(".bl-jump").onclick = function (e) { e.stopPropagation(); go(); };
+      li.querySelector(".bl-row").onclick = function (e) { if (e.target.closest(".bl-note-btn")) return; go(); };
+    });
+
+    // botao de anotar (abre/fecha a nota; some quando vazia)
+    bls.forEach(function (li) {
+      var btn = li.querySelector(".bl-note-btn"), ta = li.querySelector(".bl-note");
+      btn.onclick = function (e) {
+        e.stopPropagation();
+        var open = ta.classList.toggle("show");
+        if (open) ta.focus();
+        else if (!ta.value.trim()) btn.classList.remove("has");
+      };
+      var tmr = null;
+      ta.addEventListener("input", function () {
+        clearTimeout(tmr);
+        btn.classList.toggle("has", !!ta.value.trim());
+        tmr = setTimeout(function () {
+          saveNote(ta.dataset.key, ta.value.trim());
+          ta.classList.add("just-saved"); setTimeout(function () { ta.classList.remove("just-saved"); }, 1000);
+        }, 700);
+      });
+    });
+
+    // navegacao por capitulo
+    chips.forEach(function (ch) {
+      ch.onclick = function () {
+        var cap = rd.querySelector("#cap-" + ch.dataset.cap);
+        if (cap) cap.scrollIntoView({ behavior: "smooth", block: "start" });
+      };
+    });
+
+    // notas gerais
+    var gnote = rd.querySelector("#rd-generalnote"), gsaved = rd.querySelector("#rd-generalsaved"), gt = null;
+    gnote.addEventListener("input", function () {
+      clearTimeout(gt);
+      gt = setTimeout(function () {
+        saveNote(ep.id, gnote.value.trim());
+        if (gsaved) { gsaved.classList.add("on"); setTimeout(function () { gsaved.classList.remove("on"); }, 1500); }
+      }, 700);
+    });
+
+    if (!audio) return;
+
+    // clique na barra = seek
+    if (bar) bar.onclick = function (e) {
+      if (!audio.duration) return;
+      var r = bar.getBoundingClientRect();
+      audio.currentTime = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)) * audio.duration;
+    };
+
+    // sincronizacao com o audio
+    var lastIdx = -1;
+    function refresh() {
+      var t = audio.currentTime || 0, dur = audio.duration || 0;
+      if (barFill && dur) barFill.style.width = (t / dur * 100) + "%";
+      if (timeEl) timeEl.textContent = mmss(t) + " / " + mmss(dur || 0);
+      // bullet atual = ultimo cujo sec <= t
+      var idx = -1;
+      for (var i = 0; i < bls.length; i++) { if ((parseFloat(bls[i].dataset.sec) || 0) <= t + 0.25) idx = i; else break; }
+      if (idx === lastIdx) return;
+      lastIdx = idx;
+      bls.forEach(function (li, i) {
+        li.classList.toggle("on", i === idx);
+        li.classList.toggle("played", i < idx);
+      });
+      // acende o capitulo no nav
+      if (idx >= 0 && chips.length) {
+        var capOf = bls[idx].dataset.cap;
+        chips.forEach(function (ch) { ch.classList.toggle("on", ch.dataset.cap === capOf); });
+      }
+      // auto-scroll suave so quando esta tocando
+      if (idx >= 0 && !audio.paused) bls[idx].scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+    audio.addEventListener("timeupdate", refresh);
+    audio.addEventListener("loadedmetadata", refresh);
+    audio.addEventListener("play", refresh);
+  }
+
+  /* ---------- modo ---------- */
   function setMode(m) {
     appMode = m;
     $("radarView").style.display = (m === "radar") ? "" : "none";
@@ -259,21 +420,19 @@
     $("actionbar").style.display = (m === "radar") ? "" : "none";
     var stog = $("side-toggle"); if (stog) stog.style.display = (m === "radar") ? "" : "none";
     [].forEach.call(document.querySelectorAll(".mode-btn"), function (b) { b.classList.toggle("on", b.dataset.mode === m); });
-    if (m === "estudo") renderEstudo();
+    if (m === "estudo") renderEstudoGrid();
     window.scrollTo(0, 0);
   }
 
-  /* ---------- gerar texto em capitulos ---------- */
+  /* ---------- gerar texto / links / audio prompt ---------- */
   function gerarTexto() {
     var sel = DADOS.itens.filter(function (it) { return statusOf(it.id) === "checked"; });
     var hoje = new Date().toLocaleDateString("pt-BR");
     var L = [];
-    L.push("# Meus assuntos para me atualizar — " + hoje);
-    L.push("");
-    L.push("Abaixo, os assuntos que selecionei, organizados em capitulos por tema. Faca um resumo didatico e aprofundado de cada capitulo, com os pontos-chave, o que eu preciso saber e como aplicar na pratica.");
-    L.push("");
+    L.push("# Meus assuntos para me atualizar — " + hoje); L.push("");
+    L.push("Abaixo, os assuntos que selecionei, organizados em capitulos por tema. Faca um resumo didatico e aprofundado de cada capitulo, com os pontos-chave, o que eu preciso saber e como aplicar na pratica."); L.push("");
     var cap = 0;
-    CFG.categorias.forEach(function (c) {
+    (CFG.categorias || []).forEach(function (c) {
       var arr = sel.filter(function (it) { return it.cat === c.id; });
       if (!arr.length) return;
       cap++;
@@ -294,21 +453,14 @@
     });
     return { txt: L.join("\n").replace(/\n{3,}/g, "\n\n").trim() + "\n", cap: cap, n: sel.length };
   }
-
-  /* ---------- links pro NotebookLM (materias hospedadas) ---------- */
-  function materiaURL(id) {
-    // materias/<id>.html fica ao lado do index (mesma pasta no GitHub Pages)
-    return new URL("materias/" + id + ".html", location.href).href;
-  }
+  function materiaURL(id) { return new URL("materias/" + id + ".html", location.href).href; }
   function gerarLinks() {
     var sel = DADOS.itens.filter(function (it) { return statusOf(it.id) === "checked"; });
     return { txt: sel.map(function (it) { return materiaURL(it.id); }).join("\n"), n: sel.length };
   }
-
-  /* ---------- prompt de "Personalizar o Resumo em Áudio" (NotebookLM) ---------- */
   function gerarAudioPrompt() {
     var sel = DADOS.itens.filter(function (it) { return statusOf(it.id) === "checked"; });
-    var cats = CFG.categorias.filter(function (c) { return sel.some(function (it) { return it.cat === c.id; }); });
+    var cats = (CFG.categorias || []).filter(function (c) { return sel.some(function (it) { return it.cat === c.id; }); });
     var temas = cats.map(function (c) { return c.emoji + " " + c.nome; }).join(", ");
     var L = [];
     L.push("Este episódio é um resumo de aprendizado para mim, Bruno, dono de uma agência de marketing digital (a MediaGrowth).");
@@ -323,23 +475,23 @@
     return { txt: L.join("\n"), n: sel.length };
   }
 
-  /* ---------- modal (3 modos: links | audio | texto) ---------- */
+  /* ---------- modal ---------- */
   var modalMode = "links";
   function fillModal() {
     var title, hint, txt, saved;
     if (modalMode === "links") {
       var g = gerarLinks();
-      title = "🔗 Links pro NotebookLM";
-      hint = "Cada link abre a NOSSA matéria do assunto (o resumo curado, não a fonte crua). Cole estes links no NotebookLM como fontes: o podcast sai da nossa versão. Um link por linha.";
+      title = "Links pro NotebookLM";
+      hint = "Cada link abre a NOSSA matéria do assunto (o resumo curado, não a fonte crua). Cole no NotebookLM como fontes: o podcast sai da nossa versão. Um link por linha.";
       txt = g.txt; saved = g.n + (g.n === 1 ? " link" : " links");
     } else if (modalMode === "audio") {
       var a = gerarAudioPrompt();
-      title = "🎙️ Personalizar o Resumo em Áudio";
-      hint = "Cole este texto no campo 'Personalizar' do Resumo em Áudio do NotebookLM (define no que os apresentadores devem focar neste episódio).";
+      title = "Personalizar o Resumo em Áudio";
+      hint = "Cole no campo 'Personalizar' do Resumo em Áudio do NotebookLM (define no que os apresentadores focam neste episódio).";
       txt = a.txt; saved = a.n + " assuntos";
     } else {
       var t = gerarTexto();
-      title = "🧠 Texto em capítulos";
+      title = "Texto em capítulos";
       hint = "Os assuntos que você marcou, em capítulos. Copie e cole no Gemini/NotebookLM pedindo o resumo.";
       txt = t.txt; saved = t.cap + " capítulos · " + t.n + " itens";
     }
@@ -351,13 +503,10 @@
   }
   function openModal(mode) {
     var n = DADOS.itens.filter(function (it) { return statusOf(it.id) === "checked"; }).length;
-    if (!n) { toast("Marque assuntos primeiro ✅"); return; }
-    modalMode = mode || "links";
-    fillModal();
-    $("modal").classList.add("on");
+    if (!n) { toast("Marque assuntos primeiro ✓"); return; }
+    modalMode = mode || "links"; fillModal(); $("modal").classList.add("on");
   }
   function closeModal() { $("modal").classList.remove("on"); }
-
   function copiar() {
     var ta = $("modal-txt"); ta.select(); ta.setSelectionRange(0, 999999);
     var msg = modalMode === "links" ? "copiado ✓ · cole os links no NotebookLM"
@@ -367,12 +516,11 @@
     if (navigator.clipboard) navigator.clipboard.writeText(ta.value).then(done, function () { document.execCommand("copy"); done(); });
     else { document.execCommand("copy"); done(); }
   }
-
   function arquivarSelecionados() {
     var ids = DADOS.itens.filter(function (it) { return statusOf(it.id) === "checked"; }).map(function (it) { return it.id; });
     if (!ids.length) return;
     ids.forEach(function (id) { state.decisions[id] = { status: "read" }; });
-    post("bulk", { ids: ids.join(","), status: "read" }).then(function () { toast("Arquivados 📁"); }).catch(function () { toast("Salvo local, checar conexão"); });
+    apiPost("bulk", { ids: ids.join(","), status: "read" }).then(function (r) { if (r.status === 401) return showGate(); toast("Arquivados 📁"); }).catch(function () { toast("Salvo local, checar conexão"); });
     closeModal(); render();
   }
 
@@ -382,27 +530,22 @@
 
   /* ---------- eventos ---------- */
   function wire() {
+    if (booted) return; booted = true;
     $("chips").addEventListener("click", function (e) {
       var b = e.target.closest(".chip"); if (!b) return;
-      if (b.dataset.f) {
-        view = b.dataset.f;
-        [].forEach.call(document.querySelectorAll(".chip[data-f]"), function (x) { x.classList.toggle("on", x === b); });
-      } else if (b.dataset.g) {
-        group = b.dataset.g;
-        [].forEach.call(document.querySelectorAll(".chip[data-g]"), function (x) { x.classList.toggle("on", x === b); });
-      }
+      if (b.dataset.f) { view = b.dataset.f; [].forEach.call(document.querySelectorAll(".chip[data-f]"), function (x) { x.classList.toggle("on", x === b); }); }
+      else if (b.dataset.g) { group = b.dataset.g; [].forEach.call(document.querySelectorAll(".chip[data-g]"), function (x) { x.classList.toggle("on", x === b); }); }
       render();
     });
     $("busca").addEventListener("input", function (e) { q = e.target.value.trim().toLowerCase(); render(); });
     [].forEach.call(document.querySelectorAll(".mode-btn"), function (b) { b.onclick = function () { setMode(b.dataset.mode); }; });
     $("btn-links").onclick = function () { openModal("links"); };
     $("btn-gerar").onclick = function () { openModal("texto"); };
+    $("btn-logout").onclick = function () { apiPost("logout", {}).catch(function () {}).then(function () { location.reload(); }); };
     $("modal-close").onclick = closeModal;
     $("btn-copiar").onclick = copiar;
     $("btn-arquivar").onclick = arquivarSelecionados;
-    [].forEach.call(document.querySelectorAll(".mtab"), function (t) {
-      t.onclick = function () { modalMode = t.dataset.m; fillModal(); };
-    });
+    [].forEach.call(document.querySelectorAll(".mtab"), function (t) { t.onclick = function () { modalMode = t.dataset.m; fillModal(); }; });
     $("modal").addEventListener("click", function (e) { if (e.target.id === "modal") closeModal(); });
     $("side-toggle").onclick = openSide;
     $("side-close").onclick = closeSide;
@@ -411,23 +554,35 @@
   }
 
   /* ---------- boot ---------- */
-  Promise.all([
-    fetch("categorias.json", { cache: "no-store" }).then(function (r) { return r.json(); }),
-    fetch("dados/" + SLUG + ".json", { cache: "no-store" }).then(function (r) { return r.json(); }).catch(function () { return { itens: [], gerado_em: "" }; }),
-    apiGet(),
-    fetch("dados/estudos.json", { cache: "no-store" }).then(function (r) { return r.json(); }).catch(function () { return { episodios: [] }; })
-  ]).then(function (res) {
-    CFG = res[0]; DADOS = res[1];
-    var st = res[2] || {};
-    state = { decisions: st.decisions || {}, notes: st.notes || {} };
-    ESTUDOS = res[3] || { episodios: [] };
-    CFG.categorias.forEach(function (c) { catMap[c.id] = c; });
-    CFG.grupos.forEach(function (g) { grpMap[g.id] = g; });
-    if (CFG.subtitulo) $("subtitle").textContent = CFG.subtitulo;
-    wire();
-    render();
-    if ((params.get("m") || params.get("modo")) === "estudo") setMode("estudo");
-  }).catch(function (e) {
-    $("feed").innerHTML = '<div class="empty"><b>Erro ao carregar.</b>' + esc(String(e)) + '</div>';
-  });
+  function boot() {
+    showApp();
+    Promise.all([apiGet("data").then(okJson), apiGet("get").then(okJson)])
+      .then(function (res) {
+        var data = res[0] || {}, st = res[1] || {};
+        CFG = data.categorias || { grupos: [], categorias: [] };
+        DADOS = data.radar || { itens: [], gerado_em: "" };
+        if (!DADOS.itens) DADOS.itens = [];
+        ESTUDOS = data.estudos || { episodios: [] };
+        state = { decisions: norm(st.decisions), notes: norm(st.notes) };
+        catMap = {}; grpMap = {};
+        (CFG.categorias || []).forEach(function (c) { catMap[c.id] = c; });
+        (CFG.grupos || []).forEach(function (g) { grpMap[g.id] = g; });
+        if (CFG.subtitulo) $("subtitle").textContent = CFG.subtitulo;
+        wire();
+        render();
+        var m = params.get("m") || params.get("modo");
+        setMode(m === "estudo" ? "estudo" : "radar");
+      })
+      .catch(function (e) {
+        if (e && e.auth === false) return;
+        $("feed").innerHTML = '<div class="empty"><b>Erro ao carregar.</b>' + esc(String(e && e.message || e)) + '</div>';
+        showApp();
+      });
+  }
+
+  /* ---------- start ---------- */
+  wireGate();
+  apiGet("me").then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+    .then(function (res) { if (res.ok && res.j && res.j.auth) boot(); else showGate(); })
+    .catch(function () { showGate(); });
 })();

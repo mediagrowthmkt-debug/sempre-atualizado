@@ -3,11 +3,22 @@
 """
 SEMPRE ATUALIZADO — motor (skill pessoal do Bruno).
 Radar de aprendizado: acumula assuntos NOVOS por categoria (lista fixa em categorias.json),
-publica uma pagina de checklist (GitHub Pages) que salva o que o Bruno marca (backend PHP na
-Hostinger, estado por ID estavel do item -> marca sobrevive a recoleta) e gera um TEXTO em
-CAPITULOS com os itens selecionados, pra colar no Gemini/NotebookLM resumir.
+publica uma pagina de checklist COM LOGIN (Hostinger, mesmo dominio da API -> cookie HttpOnly)
+que salva o que o Bruno marca (estado por ID estavel do item -> marca sobrevive a recoleta) e
+gera um TEXTO em CAPITULOS com os itens selecionados, pra colar no Gemini/NotebookLM resumir.
 
 Stdlib pura. Roda no Mac e na VPS.
+
+Hospedagem: pagina + API no MESMO dominio (Hostinger) -> login por senha + cookie HttpOnly.
+  Pagina : https://mediagrowth.com.br/atualizado/?u=bruno   (public_html/atualizado)
+  API    : https://mediagrowth.com.br/atualizado-api/api.php (public_html/atualizado-api)
+  Privado: ~/domains/mediagrowth.com.br/atualizado-private/ (secret.php + content/ + state/, FORA do web root)
+
+Setup (uma vez):
+  engine.py setup                          # cria dirs na Hostinger + migra estado antigo (fecha o vazamento)
+  engine.py set-senha "SUA_SENHA_FORTE"    # gera hash bcrypt + token_secret no servidor (secret.php, chmod 600)
+  engine.py backend                        # sobe api.php + _ratelimit.php
+  engine.py publicar                       # sobe pagina + conteudo
 
 Uso:
   engine.py coletar [--cat id1,id2] [--por-query N] [--publicar]   # RSS backbone (append + dedupe)
@@ -15,9 +26,12 @@ Uso:
   engine.py gerar-texto [--status checked|all|novos] [--out arq]   # monta o texto em capitulos
   engine.py materias [--cat id1,id2]                               # gera materias/<id>.html (curadoria por assunto, pro NotebookLM)
   engine.py audio-prompt [--status checked]                        # texto pro campo "Personalizar o Resumo em Áudio" do NotebookLM
-  engine.py estudo --audio arq.m4a --file payload.json [--data YYYY-MM-DD] [--titulo "..."] [--publicar]  # cria o estudo do podcast (hospeda audio + topicos com timestamp)
-  engine.py publicar [-m "msg"]                                    # git push -> GitHub Pages
+  engine.py estudo --audio arq.m4a --file payload.json [--data YYYY-MM-DD] [--titulo "..."] [--publicar]  # cria/ADICIONA o estudo do podcast (hospeda audio + topicos com timestamp)
+  engine.py publicar [-m "msg"]                                    # materias + pagina (Hostinger) + conteudo (privado) + backup git
+  engine.py deploy-frontend                                        # so a pagina -> Hostinger
+  engine.py push-content                                           # so o conteudo -> dir privado
   engine.py backend                                                # scp api.php -> Hostinger
+  engine.py setup / set-senha "..."                                # estrutura inicial / senha do login
   engine.py link                                                   # imprime os links
   engine.py status                                                 # contagem por categoria
 
@@ -38,12 +52,20 @@ CFG = os.path.join(REPO, "categorias.json")
 USER = "bruno"
 DADOS = os.path.join(REPO, "dados", f"{USER}.json")
 
+# Backup opcional em git (so o CODIGO; dados pessoais estao no .gitignore)
 GH_OWNER = os.environ.get("SA_GH_OWNER", "mediagrowthmkt-debug")
 GH_REPO  = os.environ.get("SA_GH_REPO",  "sempre-atualizado")
-PAGES    = os.environ.get("SA_PAGES_URL", f"https://{GH_OWNER}.github.io/{GH_REPO}")
-SSH      = os.environ.get("MG_HOSTINGER_SSH", "hostinger-mg")
-REMOTE   = os.environ.get("SA_HOSTINGER_DIR", "domains/mediagrowth.com.br/public_html/atualizado-api")
-API_URL  = os.environ.get("SA_API_URL", "https://mediagrowth.com.br/atualizado-api/api.php")
+
+# Hospedagem: pagina + API no MESMO dominio (Hostinger) -> sessao por cookie HttpOnly.
+SSH        = os.environ.get("MG_HOSTINGER_SSH", "hostinger-mg")
+API_REMOTE = os.environ.get("SA_HOSTINGER_DIR", "domains/mediagrowth.com.br/public_html/atualizado-api")
+WEB_REMOTE = os.environ.get("SA_WEB_DIR",  "domains/mediagrowth.com.br/public_html/atualizado")
+PRIV_REMOTE= os.environ.get("SA_PRIV_DIR", "domains/mediagrowth.com.br/atualizado-private")  # FORA do web root
+REMOTE     = API_REMOTE  # compat
+API_URL    = os.environ.get("SA_API_URL", "https://mediagrowth.com.br/atualizado-api/api.php")
+SITE_URL   = os.environ.get("SA_SITE_URL", "https://mediagrowth.com.br/atualizado")
+
+FRONT_FILES = ["index.html", "style.css", "app.js", "config.js"]
 
 UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124 Safari/537.36"
 
@@ -224,12 +246,16 @@ def cmd_add(path, publicar=False):
 
 # ---------------------------------------------------------------- estado do backend
 def backend_state():
+    """Le as marcacoes/notas direto do arquivo de estado privado, via SSH (autenticado pela chave).
+       O endpoint HTTP agora exige login por cookie, entao o CLI usa o SSH."""
     try:
-        raw = fetch(f"{API_URL}?action=get&slug={USER}", timeout=15)
-        st = json.loads(raw.decode("utf-8"))
+        r = subprocess.run(
+            ["ssh", "-o", "ConnectTimeout=15", SSH, f"cat {PRIV_REMOTE}/state/{USER}.json 2>/dev/null || echo '{{}}'"],
+            capture_output=True, text=True)
+        st = json.loads(r.stdout or "{}")
         return st.get("decisions", {}) or {}
     except Exception as e:
-        print(f"⚠️  não consegui ler o backend ({e}). Uso só o banco local.")
+        print(f"⚠️  não consegui ler o estado ({e}). Uso só o banco local.")
         return {}
 
 
@@ -479,32 +505,112 @@ def cmd_estudo(audio, payload_path, data=None, titulo=None, publicar=False):
         cmd_publicar(f"estudo: {titulo} ({data})")
 
 
-# ---------------------------------------------------------------- publicar / backend / status
+# ---------------------------------------------------------------- deploy (Hostinger)
+def _git_backup(msg=None):
+    """Versiona so o CODIGO no GitHub (dados pessoais estao no .gitignore). Nao e a hospedagem."""
+    try:
+        git(["add", "-A"])
+        r = subprocess.run(["git", "status", "--porcelain"], cwd=REPO, capture_output=True, text=True)
+        if not r.stdout.strip():
+            return
+        git(["commit", "-m", msg or f"sempre-atualizado {today()}"])
+        subprocess.run(["git", "push", "origin", "main"], cwd=REPO, check=False)
+    except Exception as e:
+        print(f"ℹ️  backup no git pulado ({e})")
+
+
+def cmd_deploy_frontend():
+    """Sobe a pagina (index/style/app/config + materias) pro public_html/atualizado da Hostinger."""
+    sh(["ssh", "-o", "ConnectTimeout=20", SSH, f"mkdir -p {WEB_REMOTE}/materias && echo OK"])
+    for f in FRONT_FILES:
+        p = os.path.join(REPO, f)
+        if os.path.exists(p):
+            sh(["scp", "-o", "ConnectTimeout=30", p, f"{SSH}:{WEB_REMOTE}/{f}"])
+    if os.path.isdir(MATERIAS):
+        sh(["rsync", "-az", "--delete", "-e", "ssh", MATERIAS + "/", f"{SSH}:{WEB_REMOTE}/materias/"])
+    print(f"✅ Pagina no ar: {SITE_URL}/?u={USER}")
+
+
+def cmd_push_content():
+    """Sobe o conteudo curado (categorias + radar + estudos) pro dir PRIVADO (fora do web root)."""
+    sh(["ssh", "-o", "ConnectTimeout=20", SSH,
+        f"mkdir -p {PRIV_REMOTE}/content {PRIV_REMOTE}/state && chmod 700 {PRIV_REMOTE} && echo OK"])
+    for src, dst in [(CFG, "categorias.json"), (DADOS, "bruno.json"), (ESTUDOS, "estudos.json")]:
+        if os.path.exists(src):
+            sh(["scp", "-o", "ConnectTimeout=30", src, f"{SSH}:{PRIV_REMOTE}/content/{dst}"])
+    print("✅ Conteudo privado atualizado (categorias + radar + estudos).")
+
+
 def cmd_publicar(msg=None):
-    cmd_materias()  # sempre regenera as paginas-materia antes de publicar
-    git(["add", "-A"])
-    r = subprocess.run(["git", "status", "--porcelain"], cwd=REPO, capture_output=True, text=True)
-    if not r.stdout.strip():
-        print("Nada novo para publicar.")
-        return
-    git(["commit", "-m", msg or f"atualiza sempre-atualizado {today()}"])
-    git(["push", "origin", "main"])
-    print(f"✅ Publicado. Pagina: {PAGES}/?u={USER}  (leva ~1 min pra atualizar)")
+    cmd_materias()          # regenera as paginas-materia (publicas, pro NotebookLM)
+    cmd_deploy_frontend()   # pagina -> Hostinger
+    cmd_push_content()      # conteudo -> dir privado
+    _git_backup(msg)        # backup opcional do codigo no git
+    print(f"✅ Publicado: {SITE_URL}/?u={USER}")
 
 
 def cmd_backend():
+    """Deploy do backend PHP (api.php + _ratelimit.php)."""
     sh(["ssh", "-o", "ConnectTimeout=15", SSH,
-        f"mkdir -p {REMOTE}/data && chmod 775 {REMOTE}/data && echo OK"])
-    sh(["scp", "-o", "ConnectTimeout=15", os.path.join(REPO, "api", "api.php"), f"{SSH}:{REMOTE}/api.php"])
+        f"mkdir -p {API_REMOTE} {PRIV_REMOTE}/state && chmod 700 {PRIV_REMOTE} && echo OK"])
+    sh(["scp", "-o", "ConnectTimeout=15", os.path.join(REPO, "api", "api.php"), f"{SSH}:{API_REMOTE}/api.php"])
     rl = os.path.join(REPO, "api", "_ratelimit.php")
     if os.path.exists(rl):
-        sh(["scp", "-o", "ConnectTimeout=15", rl, f"{SSH}:{REMOTE}/_ratelimit.php"])
+        sh(["scp", "-o", "ConnectTimeout=15", rl, f"{SSH}:{API_REMOTE}/_ratelimit.php"])
     print(f"✅ Backend no ar: {API_URL}")
 
 
+def cmd_setup():
+    """Cria a estrutura na Hostinger e migra o estado antigo (publico -> privado), fechando o vazamento."""
+    sh(["ssh", "-o", "ConnectTimeout=20", SSH,
+        f"mkdir -p {PRIV_REMOTE}/content {PRIV_REMOTE}/state {WEB_REMOTE}/materias && chmod 700 {PRIV_REMOTE} && echo OK"])
+    # migra as marcacoes/notas ja existentes do dir publico antigo pro privado, e apaga o publico (leak)
+    subprocess.run(["ssh", "-o", "ConnectTimeout=20", SSH,
+        f"if [ -f {API_REMOTE}/data/{USER}.json ]; then cp -n {API_REMOTE}/data/{USER}.json {PRIV_REMOTE}/state/{USER}.json && echo 'estado migrado'; fi; "
+        f"rm -rf {API_REMOTE}/data; echo OK"], check=False)
+    print("✅ Estrutura criada, estado migrado e dir publico de estado removido (vazamento fechado).")
+    print("   Proximo: engine.py set-senha \"SUA_SENHA\"  ->  backend  ->  publicar")
+
+
+def cmd_set_senha(senha=None):
+    """Cria/atualiza o segredo (hash bcrypt da senha + token_secret) FORA do web root, via SSH.
+       A senha vai pela STDIN do SSH (cifrado), nunca no argv. O hash e o secret sao gerados NO servidor."""
+    senha = (senha or "").strip()
+    if len(senha) < 8:
+        print("Use: engine.py set-senha \"SUA_SENHA_FORTE\"  (minimo 8 caracteres)."); return
+    os.makedirs(os.path.join(REPO, "_scratch"), exist_ok=True)
+    helper = os.path.join(REPO, "_scratch", "setpw.php")
+    php = (
+        "<?php\n"
+        "$pw=trim(stream_get_contents(STDIN));\n"
+        "if($pw==='' || strlen($pw)<8){fwrite(STDERR,\"senha invalida\\n\");exit(1);}\n"
+        f"$dir='{PRIV_REMOTE}';\n"
+        "if(!is_dir($dir)) mkdir($dir,0700,true);\n"
+        "$c=['password_hash'=>password_hash($pw,PASSWORD_DEFAULT),'token_secret'=>bin2hex(random_bytes(32))];\n"
+        "file_put_contents($dir.'/secret.php',\"<?php\\nreturn \".var_export($c,true).\";\\n\");\n"
+        "chmod($dir.'/secret.php',0600);\n"
+        "echo 'ok';\n"
+    )
+    open(helper, "w", encoding="utf-8").write(php)
+    sh(["scp", "-o", "ConnectTimeout=20", helper, f"{SSH}:~/.sa_setpw.php"])
+    print("· definindo a senha no servidor (via STDIN do SSH, sem expor no argv)…")
+    p = subprocess.run(["ssh", "-o", "ConnectTimeout=20", SSH, "php ~/.sa_setpw.php; rm -f ~/.sa_setpw.php"],
+                       input=senha, capture_output=True, text=True)
+    try:
+        os.remove(helper)
+    except OSError:
+        pass
+    if "ok" in (p.stdout or ""):
+        print("✅ Senha definida. Segredo em atualizado-private/secret.php (chmod 600, fora do web root).")
+    else:
+        print("❌ Nao consegui definir a senha.")
+        if p.stdout: print("   stdout:", p.stdout.strip())
+        if p.stderr: print("   stderr:", p.stderr.strip())
+
+
 def links():
-    print(f"  Pagina  : {PAGES}/?u={USER}")
-    print(f"  Backend : {API_URL}?action=get&slug={USER}")
+    print(f"  Pagina  : {SITE_URL}/?u={USER}")
+    print(f"  Backend : {API_URL}  (login por cookie; use a pagina)")
 
 
 def cmd_status():
@@ -558,8 +664,16 @@ def main():
                    titulo=arg("--titulo"), publicar="--publicar" in a)
     elif c == "publicar":
         cmd_publicar(arg("-m"))
+    elif c == "deploy-frontend":
+        cmd_deploy_frontend()
+    elif c == "push-content":
+        cmd_push_content()
     elif c == "backend":
         cmd_backend()
+    elif c == "setup":
+        cmd_setup()
+    elif c == "set-senha":
+        cmd_set_senha(a[1] if len(a) > 1 else None)
     elif c == "link":
         links()
     elif c == "status":

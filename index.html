@@ -3,56 +3,80 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0a0a0c">
 <title>Sempre Atualizado</title>
 <meta name="robots" content="noindex,nofollow">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230a0a0c'/%3E%3Ctext x='32' y='44' font-size='34' text-anchor='middle'%3E%F0%9F%A7%A0%3C/text%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Montserrat:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
+<!-- ===================== LOGIN ===================== -->
+<div id="gate" class="gate" style="display:none">
+  <div class="gate-card">
+    <div class="gate-mark">🧠</div>
+    <h1>Sempre Atualizado</h1>
+    <p>Área pessoal do Bruno. Entre para continuar.</p>
+    <form class="gate-form" id="gate-form" autocomplete="off">
+      <label class="gate-lbl" for="gate-pass">Senha</label>
+      <input class="gate-input" id="gate-pass" type="password" placeholder="••••••••" autocomplete="current-password" required>
+      <button class="gate-btn" id="gate-btn" type="submit">Entrar</button>
+      <div class="gate-err" id="gate-err"></div>
+    </form>
+    <div class="gate-foot">Acesso protegido · sessão segura</div>
+  </div>
+</div>
+
+<!-- ===================== APP ===================== -->
+<div id="app" style="display:none">
+
 <header class="hero">
   <div class="wrap hero-in">
     <div class="hero-txt">
-      <h1>🧠 Sempre Atualizado</h1>
-      <div class="sub" id="subtitle">Radar de aprendizado — assuntos novos por tema, todo dia</div>
+      <h1>Sempre Atualizado</h1>
+      <div class="sub" id="subtitle">Radar de aprendizado, assuntos novos por tema, todo dia</div>
     </div>
     <div class="stats" id="stats">
       <span class="st novos"><b id="s-novos">0</b><i>novos</i></span>
       <span class="st sel"><b id="s-sel">0</b><i>selecionados</i></span>
       <span class="st tot"><b id="s-tot">0</b><i>no banco</i></span>
       <span class="st upd" id="s-upd"></span>
+      <button class="btn-logout" id="btn-logout" title="Sair">Sair</button>
     </div>
   </div>
 </header>
 
 <nav class="modeswitch">
   <div class="wrap ms-in">
-    <button class="mode-btn on" data-mode="radar">✨ Radar de assuntos</button>
-    <button class="mode-btn" data-mode="estudo">📻 Estudo do podcast</button>
+    <button class="mode-btn on" data-mode="radar">✦ Radar de assuntos</button>
+    <button class="mode-btn" data-mode="estudo">◈ Estudo do podcast</button>
   </div>
 </nav>
 
+<!-- ============ RADAR ============ -->
 <div id="radarView">
 <nav class="toolbar">
   <div class="wrap tb-in">
-    <input id="busca" class="busca" type="search" placeholder="🔎 buscar assunto…" autocomplete="off">
+    <input id="busca" class="busca" type="search" placeholder="Buscar assunto…" autocomplete="off">
     <div class="chips" id="chips">
-      <button class="chip on" data-f="novos">✨ Novos</button>
-      <button class="chip" data-f="sel">✅ Selecionados</button>
-      <button class="chip" data-f="todos">📋 Todos</button>
-      <button class="chip" data-f="lidos">📁 Arquivados</button>
+      <button class="chip on" data-f="novos">✦ Novos</button>
+      <button class="chip" data-f="sel">✓ Selecionados</button>
+      <button class="chip" data-f="todos">Todos</button>
+      <button class="chip" data-f="lidos">Arquivados</button>
       <span class="chip-sep"></span>
       <button class="chip" data-g="all" data-on="1">Tudo</button>
-      <button class="chip" data-g="negocios">🏢 Negócios</button>
-      <button class="chip" data-g="pessoal">🌱 Pessoal</button>
+      <button class="chip" data-g="negocios">Negócios</button>
+      <button class="chip" data-g="pessoal">Pessoal</button>
     </div>
   </div>
 </nav>
 
 <div class="layout">
   <aside id="side" class="side">
-    <div class="side-head"><span>📑 Categorias</span><button id="side-close" title="Fechar">✕</button></div>
+    <div class="side-head"><span>Categorias</span><button id="side-close" title="Fechar">✕</button></div>
     <div id="sidelist" class="sidelist"></div>
   </aside>
 
@@ -61,23 +85,27 @@
   </main>
 </div>
 
-<button id="side-toggle" class="side-toggle">📑 Categorias</button>
+<button id="side-toggle" class="side-toggle">Categorias</button>
 <div id="side-backdrop" class="side-backdrop"></div>
 </div><!-- /radarView -->
 
+<!-- ============ ESTUDO ============ -->
 <div id="estudoView" class="estudo-view" style="display:none">
-  <div class="wrap">
-    <div id="estudoFeed" class="estudo-feed"><div class="loading">Carregando os episódios…</div></div>
+  <div class="estudo-intro" id="estudoIntro">
+    <h2>Estudo do podcast</h2>
+    <p>Cada bloco é um estudo do dia. Toque para ouvir e ir anotando enquanto acompanha.</p>
   </div>
+  <div id="estudoGrid"><div class="loading">Carregando os estudos…</div></div>
+  <div id="estudoReader" class="reader" style="display:none"></div>
 </div>
 
-<!-- barra flutuante de acao -->
+<!-- barra flutuante de acao (radar) -->
 <div class="actionbar" id="actionbar">
   <div class="wrap ab-in">
     <span class="ab-count" id="ab-count">0 selecionados</span>
     <div class="ab-btns">
-      <button id="btn-links" class="btn-links">🔗 Links pro NotebookLM</button>
-      <button id="btn-gerar" class="btn-gerar">🧠 Gerar texto</button>
+      <button id="btn-links" class="btn-links">Links pro NotebookLM</button>
+      <button id="btn-gerar" class="btn-gerar">Gerar texto</button>
     </div>
   </div>
 </div>
@@ -86,19 +114,19 @@
 <div class="modal" id="modal">
   <div class="modal-card">
     <div class="modal-head">
-      <b id="modal-title">🔗 Links pro NotebookLM</b>
+      <b id="modal-title">Links pro NotebookLM</b>
       <button id="modal-close" title="Fechar">✕</button>
     </div>
     <div class="modal-tabs">
-      <button class="mtab on" data-m="links">🔗 Links</button>
-      <button class="mtab" data-m="audio">🎙️ Personalizar áudio</button>
-      <button class="mtab" data-m="texto">📄 Texto</button>
+      <button class="mtab on" data-m="links">Links</button>
+      <button class="mtab" data-m="audio">Personalizar áudio</button>
+      <button class="mtab" data-m="texto">Texto</button>
     </div>
     <p class="modal-hint" id="modal-hint"></p>
     <textarea id="modal-txt" readonly></textarea>
     <div class="modal-actions">
-      <button id="btn-copiar" class="btn-copiar">📋 Copiar</button>
-      <button id="btn-arquivar" class="btn-arquivar">📁 Marcar selecionados como lidos</button>
+      <button id="btn-copiar" class="btn-copiar">Copiar</button>
+      <button id="btn-arquivar" class="btn-arquivar">Marcar selecionados como lidos</button>
       <span class="modal-saved" id="modal-saved"></span>
     </div>
   </div>
@@ -107,6 +135,8 @@
 <footer class="foot">
   <div class="wrap">Sempre Atualizado · pessoal do Bruno · o que você marca fica salvo.</div>
 </footer>
+
+</div><!-- /app -->
 
 <div id="toast" class="toast"></div>
 

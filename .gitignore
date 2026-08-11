@@ -1,5 +1,10 @@
 .DS_Store
 api/data/
+api/secret.php
 *.bak.*
 .sa-tmp-*.json
 _scratch/
+
+# Conteudo pessoal: NAO vai pro git (fica so local + Hostinger privada, atras do login)
+dados/bruno.json
+dados/estudos.json
