@@ -13,7 +13,7 @@
 
   var CFG = null, DADOS = { itens: [], gerado_em: "" }, ESTUDOS = { episodios: [] };
   var state = { decisions: {}, notes: {} };
-  var appMode = "radar", view = "novos", group = "all", q = "";
+  var appMode = "radar", view = "novos", group = "all", q = "", catFilter = null;
   var catMap = {}, grpMap = {}, booted = false;
 
   var $ = function (id) { return document.getElementById(id); };
@@ -87,7 +87,12 @@
     return h.indexOf(q) !== -1;
   }
   function visibleItems() {
-    return DADOS.itens.filter(function (it) { return catMap[it.cat] && passGroup(it.cat) && passView(it.id) && passQ(it); });
+    return DADOS.itens.filter(function (it) {
+      if (!catMap[it.cat]) return false;
+      // filtro por categoria (clique na barra lateral) ignora o grupo: mostra so aquela categoria
+      if (catFilter) return it.cat === catFilter && passView(it.id) && passQ(it);
+      return passGroup(it.cat) && passView(it.id) && passQ(it);
+    });
   }
 
   /* ---------- contadores ---------- */
@@ -121,14 +126,15 @@
       gh.textContent = g.emoji + " " + g.nome; el.appendChild(gh);
       (CFG.categorias || []).filter(function (c) { return c.grupo === g.id; }).forEach(function (c) {
         var n = perCat[c.id] || 0;
-        var row = document.createElement("div"); row.className = "side-cat";
+        var row = document.createElement("div"); row.className = "side-cat" + (catFilter === c.id ? " on" : "");
         row.innerHTML = '<span class="em">' + c.emoji + '</span><span class="nm">' + esc(c.nome) + '</span>'
           + '<span class="badge' + (n ? "" : " zero") + '">' + n + '</span>';
         row.onclick = function () {
+          // clica -> filtra o feed so nessa categoria; clica de novo -> volta pra todas
+          catFilter = (catFilter === c.id) ? null : c.id;
           closeSide();
-          var t = document.getElementById("sec-" + c.id);
-          if (t) t.scrollIntoView({ behavior: "smooth", block: "start" });
-          else toast("Nada em " + c.nome + " nesse filtro.");
+          render();
+          var fc = document.querySelector(".feedcol"); if (fc) fc.scrollIntoView({ behavior: "smooth", block: "start" });
         };
         el.appendChild(row);
       });
@@ -627,8 +633,8 @@
     if (booted) return; booted = true;
     $("chips").addEventListener("click", function (e) {
       var b = e.target.closest(".chip"); if (!b) return;
-      if (b.dataset.f) { view = b.dataset.f; [].forEach.call(document.querySelectorAll(".chip[data-f]"), function (x) { x.classList.toggle("on", x === b); }); }
-      else if (b.dataset.g) { group = b.dataset.g; [].forEach.call(document.querySelectorAll(".chip[data-g]"), function (x) { x.classList.toggle("on", x === b); }); }
+      if (b.dataset.f) { view = b.dataset.f; catFilter = null; [].forEach.call(document.querySelectorAll(".chip[data-f]"), function (x) { x.classList.toggle("on", x === b); }); }
+      else if (b.dataset.g) { group = b.dataset.g; catFilter = null; [].forEach.call(document.querySelectorAll(".chip[data-g]"), function (x) { x.classList.toggle("on", x === b); }); }
       render();
     });
     $("busca").addEventListener("input", function (e) { q = e.target.value.trim().toLowerCase(); render(); });
