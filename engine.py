@@ -106,10 +106,20 @@ def item_id(cat, url, titulo):
 
 
 def strip_html(s):
-    s = re.sub(r"<[^>]+>", " ", s or "")
-    s = (s.replace("&amp;", "&").replace("&lt;", "<").replace("&gt;", ">")
-           .replace("&quot;", '"').replace("&#39;", "'").replace("&nbsp;", " "))
+    # decodifica as entidades ANTES de tirar as tags: o Google News manda o HTML
+    # entity-encoded (&lt;a href="..."&gt;); se stripar antes de decodificar, a tag <a ...> sobrevive.
+    s = ((s or "").replace("&nbsp;", " ").replace("&lt;", "<").replace("&gt;", ">")
+           .replace("&quot;", '"').replace("&#39;", "'").replace("&amp;", "&"))
+    s = re.sub(r"<[^>]+>", " ", s)
     return re.sub(r"\s+", " ", s).strip()
+
+
+def clean_resumo(s):
+    """Resumo limpo pro card/materia: sem HTML e sem URL crua; leftover curto vira vazio."""
+    r = strip_html(s)
+    r = re.sub(r"https?://\S+", " ", r)
+    r = re.sub(r"\s+", " ", r).strip(" -–—|·•")
+    return r if len(r) >= 25 else ""
 
 
 def sh(cmd, cwd=REPO, check=True):
@@ -226,7 +236,7 @@ def cmd_coletar(cats=None, por_query=6, publicar=False):
                 existentes.add(iid)
                 dados["itens"].append({
                     "id": iid, "cat": cat_id, "titulo": it["titulo"],
-                    "resumo": it["resumo"], "porque": "", "fonte": it["fonte"],
+                    "resumo": clean_resumo(it["resumo"]), "porque": "", "fonte": it["fonte"],
                     "url": it["url"], "tipo": "noticia", "data": it["data"],
                     "coletado_em": today(), "origem": "rss"
                 })
@@ -607,7 +617,7 @@ def materia_html(it, cfg):
 <html lang="pt-BR">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <meta name="robots" content="noindex,nofollow">
 <meta name="description" content="{_esc(resumo[:180] if resumo else titulo)}">
 <title>{_esc(titulo)}</title>
