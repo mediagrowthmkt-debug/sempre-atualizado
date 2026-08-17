@@ -564,39 +564,18 @@ def cmd_audio_prompt(status="checked"):
     if not sel:
         print("Nenhum item selecionado (status='%s')." % status)
         return
-    linhas = [
-        "Este episódio é um resumo de aprendizado para mim, Bruno, dono de uma agência de marketing digital (a MediaGrowth).",
-        "",
-        "Falem em português do Brasil, com tom prático, direto e envolvente, como dois especialistas conversando de igual para igual comigo. Sem introdução longa e sem definições óbvias.",
-        "",
-        "Concentrem-se em: (1) o que há de novo e realmente importante em cada tema; (2) os pontos-chave que eu preciso saber; (3) principalmente COMO aplicar na prática, na agência e na minha vida. Tragam números, exemplos e o porquê de cada coisa importar, e fechem cada tema com um próximo passo concreto.",
-        "",
-        "Conectem os assuntos entre si quando fizer sentido e priorizem insight acionável no lugar de teoria. Podem ser críticos e dar opinião, não só descrever.",
-        "",
-        f"Abaixo está o roteiro dos {len(sel)} assuntos deste episódio, organizados por tema. Para cada assunto deixei um resumo do que é, por que importa e a referência de onde ele saiu, pra vocês terem contexto e serem precisos ao falar:",
-        "",
-    ]
-    for c in cfg["categorias"]:
-        arr = [i for i in sel if i["cat"] == c["id"]]
-        if not arr:
-            continue
-        cab = f"{c['emoji']} {c['nome']}"
-        if c.get("desc"):
-            cab += f" — {c['desc']}"
-        linhas.append(cab)
-        for i in arr:
-            expl = " ".join((i.get("porque") or i.get("resumo") or "").split()).strip()
-            if len(expl) > 240:
-                expl = expl[:237].rsplit(" ", 1)[0] + "..."
-            ref = i.get("fonte") or ""
-            if i.get("url"):
-                ref += (" — " if ref else "") + i["url"]
-            linha = "- " + i["titulo"] + (f": {expl}" if expl else "")
-            if ref:
-                linha += f" (Referência: {ref})"
-            linhas.append(linha)
-        linhas.append("")
-    print("\n".join(linhas).rstrip() + "\n")
+    # Compacto: o campo "Personalizar" do NotebookLM tem ~500 caracteres. Vai so a intro curta
+    # (quem sou eu + foco) + os TITULOS dos assuntos; o conteudo o NotebookLM pega das fontes coladas.
+    AUDIO_LIMITE = 500
+    intro = ("Sou o Bruno, dono da MediaGrowth (agência de marketing digital). Uso isto pra me atualizar "
+             "e aprender o que me faça vender, lucrar e ganhar mais no meu negócio e com meus clientes. "
+             "Foquem no que é novo e em COMO aplicar. Cubram TODOS estes assuntos: ")
+    titulos = [" ".join((i.get("titulo") or "").split()).strip() for i in sel]
+    titulos = [t for t in titulos if t]
+    txt = intro + " · ".join(titulos) + "."
+    print(txt)
+    aviso = " ⚠️ ACIMA do limite — selecione menos assuntos pra este áudio" if len(txt) > AUDIO_LIMITE else " ✓ dentro do limite"
+    print(f"\n[{len(txt)}/{AUDIO_LIMITE} caracteres{aviso}]", file=sys.stderr)
 
 
 # ---------------------------------------------------------------- materias (1 pagina por assunto, pro NotebookLM)

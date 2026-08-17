@@ -808,35 +808,16 @@
     for (var i = 0; i < urls.length; i += LINKS_POR_PARTE) partes.push(urls.slice(i, i + LINKS_POR_PARTE));
     return { partes: partes, n: urls.length };
   }
+  var AUDIO_LIMITE = 500; // limite de caracteres do campo "Personalizar" do NotebookLM
   function gerarAudioPrompt() {
     var sel = DADOS.itens.filter(function (it) { return statusOf(it.id) === "checked"; });
-    var L = [];
-    L.push("Este episódio é um resumo de aprendizado para mim, Bruno, dono de uma agência de marketing digital (a MediaGrowth).");
-    L.push("");
-    L.push("Falem em português do Brasil, com tom prático, direto e envolvente, como dois especialistas conversando de igual para igual comigo. Sem introdução longa e sem definições óbvias.");
-    L.push("");
-    L.push("Concentrem-se em: (1) o que há de novo e realmente importante em cada tema; (2) os pontos-chave que eu preciso saber; (3) principalmente COMO aplicar na prática, na agência e na minha vida. Tragam números, exemplos e o porquê de cada coisa importar, e fechem cada tema com um próximo passo concreto.");
-    L.push("");
-    L.push("Conectem os assuntos entre si quando fizer sentido e priorizem insight acionável no lugar de teoria. Podem ser críticos e dar opinião, não só descrever.");
-    L.push("");
-    L.push("Abaixo está o roteiro dos " + sel.length + " assuntos deste episódio, organizados por tema. Para cada assunto deixei um resumo do que é, por que importa e a referência de onde ele saiu, pra vocês terem contexto e serem precisos ao falar:");
-    L.push("");
-    (CFG.categorias || []).forEach(function (c) {
-      var arr = sel.filter(function (it) { return it.cat === c.id; });
-      if (!arr.length) return;
-      L.push(c.emoji + " " + c.nome + (c.desc ? " — " + c.desc : ""));
-      arr.forEach(function (it) {
-        var expl = (it.porque || it.resumo || "").replace(/\s+/g, " ").trim();
-        if (expl.length > 240) expl = expl.slice(0, 237).replace(/\s+\S*$/, "") + "...";
-        var ref = it.fonte ? it.fonte : "";
-        if (it.url) ref += (ref ? " — " : "") + it.url;
-        var line = "- " + it.titulo + (expl ? ": " + expl : "");
-        if (ref) line += " (Referência: " + ref + ")";
-        L.push(line);
-      });
-      L.push("");
-    });
-    return { txt: L.join("\n").replace(/\n{3,}/g, "\n\n").trim() + "\n", n: sel.length };
+    // Compacto de proposito: o campo "Personalizar" do NotebookLM tem ~500 caracteres.
+    // Por isso vai so a intro curta (quem sou eu + foco) + os TITULOS dos assuntos (o roteiro),
+    // sem resumo nem link — o conteudo em si o NotebookLM ja tem pelas fontes que voce colou.
+    var intro = "Sou o Bruno, dono da MediaGrowth (agência de marketing digital). Uso isto pra me atualizar e aprender o que me faça vender, lucrar e ganhar mais no meu negócio e com meus clientes. Foquem no que é novo e em COMO aplicar. Cubram TODOS estes assuntos: ";
+    var titulos = sel.map(function (it) { return (it.titulo || "").replace(/\s+/g, " ").trim(); }).filter(Boolean);
+    var txt = intro + titulos.join(" · ") + ".";
+    return { txt: txt, n: sel.length, chars: txt.length, limite: AUDIO_LIMITE };
   }
 
   /* ---------- modal ---------- */
@@ -868,8 +849,11 @@
     } else if (modalMode === "audio") {
       var a = gerarAudioPrompt();
       title = "Personalizar o Resumo em Áudio";
-      hint = "Cole no campo 'Personalizar' do Resumo em Áudio do NotebookLM. Vai com cada tema explicado e as referências usadas, pra dar mais contexto ao áudio que a IA gera.";
-      txt = a.txt; saved = a.n + " assuntos";
+      hint = "Cole no campo 'Personalizar' do Resumo em Áudio do NotebookLM. Vem curto: quem você é, o foco e a lista de todos os assuntos a cobrir (o conteúdo em si o NotebookLM pega das fontes que você colou).";
+      txt = a.txt;
+      var excedeu = a.chars > a.limite;
+      saved = a.n + " assuntos · " + a.chars + "/" + a.limite + " caracteres"
+            + (excedeu ? " ⚠️ acima do limite do NotebookLM — marque menos assuntos pra este áudio" : " ✓ dentro do limite");
     } else {
       var t = gerarTexto();
       title = "Texto em capítulos";
@@ -880,6 +864,7 @@
     $("modal-hint").textContent = hint;
     $("modal-txt").value = txt;
     $("modal-saved").textContent = saved;
+    $("modal-saved").classList.toggle("over", modalMode === "audio" && typeof excedeu !== "undefined" && excedeu);
     renderPartes();
     [].forEach.call(document.querySelectorAll(".mtab"), function (x) { x.classList.toggle("on", x.dataset.m === modalMode); });
   }

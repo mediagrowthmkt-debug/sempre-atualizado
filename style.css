@@ -220,6 +220,7 @@ a:hover{color:var(--gold);text-decoration:underline;text-underline-offset:2px}
   padding:11px 18px;font:inherit;font-weight:700;cursor:pointer;transition:.15s}
 .btn-arquivar:hover{border-color:var(--line-gold);color:var(--gold-2)}
 .modal-saved{font-size:12px;color:var(--gold-2);font-weight:700}
+.modal-saved.over{color:#f87171}
 
 /* ====================== TOAST ====================== */
 .toast{position:fixed;left:50%;bottom:112px;transform:translateX(-50%) translateY(20px);background:#1a1720;
