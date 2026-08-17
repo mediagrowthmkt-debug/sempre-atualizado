@@ -53,6 +53,7 @@
   <div class="wrap ms-in">
     <button class="mode-btn on" data-mode="radar">✦ Radar de assuntos</button>
     <button class="mode-btn" data-mode="estudo">◈ Estudo do podcast</button>
+    <button class="mode-btn" data-mode="anotacoes">✎ Anotações &amp; Insights</button>
   </div>
 </nav>
 
@@ -104,6 +105,35 @@
   <div id="estudoReader" class="reader" style="display:none"></div>
 </div>
 
+<!-- ============ ANOTAÇÕES & INSIGHTS ============ -->
+<div id="anotacoesView" class="anota-view" style="display:none">
+  <nav class="toolbar anota-toolbar">
+    <div class="wrap tb-in">
+      <input id="anotaBusca" class="busca" type="search" placeholder="Buscar nas anotações…" autocomplete="off">
+      <div class="chips" id="anotaChips">
+        <button class="chip on" data-af="todos">Tudo</button>
+        <button class="chip" data-af="insight">⭐ Insights</button>
+        <button class="chip" data-af="avulsa">✎ Avulsas</button>
+        <span class="chip-sep"></span>
+        <!-- chips de tema injetados aqui -->
+      </div>
+    </div>
+  </nav>
+  <div class="wrap anota-wrap">
+    <div class="anota-head">
+      <div class="anota-intro">
+        <h2>Anotações &amp; Insights</h2>
+        <p id="anotaSub">Tudo que você anotou nos estudos, num lugar só. Edite, marque os insights ⭐ e organize por tema.</p>
+      </div>
+      <div class="anota-tools">
+        <select id="anotaEstudo" class="anota-select" title="Filtrar por estudo"></select>
+        <button id="anotaNova" class="anota-nova" title="Criar uma anotação avulsa">+ Nova anotação</button>
+      </div>
+    </div>
+    <div id="anotaFeed" class="anota-feed"><div class="loading">Carregando as anotações…</div></div>
+  </div>
+</div>
+
 <!-- barra flutuante de acao (radar) -->
 <div class="actionbar" id="actionbar">
   <div class="wrap ab-in">
@@ -128,6 +158,7 @@
       <button class="mtab" data-m="texto">Texto</button>
     </div>
     <p class="modal-hint" id="modal-hint"></p>
+    <div class="modal-partes" id="modal-partes"></div>
     <textarea id="modal-txt" readonly></textarea>
     <div class="modal-actions">
       <button id="btn-copiar" class="btn-copiar">Copiar</button>

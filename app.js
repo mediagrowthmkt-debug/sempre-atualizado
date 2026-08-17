@@ -14,7 +14,8 @@
   var CFG = null, DADOS = { itens: [], gerado_em: "" }, ESTUDOS = { episodios: [] };
   var state = { decisions: {}, notes: {} };
   var appMode = "radar", view = "novos", group = "all", q = "", catFilter = null;
-  var catMap = {}, grpMap = {}, booted = false;
+  var catMap = {}, grpMap = {}, epMap = {}, booted = false;
+  var anotaState = { q: "", filter: "todos", tema: null, estudo: "all" };
 
   var $ = function (id) { return document.getElementById(id); };
   function esc(s) {
@@ -209,10 +210,21 @@
     try { var d = new Date(iso); return d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }); } catch (e) { return ""; }
   }
   function epNoteKey(epId, tp, idx) { return epId + ":" + (tp.sec != null ? tp.sec : "i" + idx); }
+  // grava a nota (texto + star + tag) no backend a partir do estado em memoria; texto vazio remove.
+  function persistNote(key) {
+    var n = state.notes[key];
+    var text = (n && n.text != null) ? String(n.text).trim() : "";
+    apiPost("note", { key: key, text: text, star: (n && n.star) ? "1" : "0", tag: (n && n.tag) || "" })
+      .then(function (r) { if (r.status === 401) showGate(); })
+      .catch(function () { toast("Sem conexão pra salvar a nota"); });
+  }
+  // usada pelo reader (texto por topico/ep) — preserva star/tag ja existentes na nota
   function saveNote(key, text) {
     if (!state.notes) state.notes = {};
-    if (text) state.notes[key] = { text: text }; else delete state.notes[key];
-    apiPost("note", { key: key, text: text }).then(function (r) { if (r.status === 401) showGate(); }).catch(function () { toast("Sem conexão pra salvar a nota"); });
+    text = (text == null ? "" : String(text)).trim();
+    if (text) { state.notes[key] = state.notes[key] || {}; state.notes[key].text = text; }
+    else { delete state.notes[key]; }
+    persistNote(key);
   }
 
   /* ---- grid de blocos, agrupado por dia ---- */
@@ -515,15 +527,243 @@
     audio.addEventListener("ended", savePos);
   }
 
+  /* ==================== ANOTAÇÕES & INSIGHTS ==================== */
+  // Agrega TODAS as notas (por topico + gerais do estudo + avulsas) num lugar so.
+  // A chave da nota decodifica o contexto: "<epId>:<sec>" = topico | "<epId>" = geral | "ins:<ts>" = avulsa.
+  function trunc(s, n) { s = String(s || ""); return s.length > n ? s.slice(0, n).replace(/\s+\S*$/, "") + "…" : s; }
+  function relTime(iso) {
+    if (!iso) return "";
+    var d = new Date(iso), diff = (Date.now() - d.getTime()) / 1000;
+    if (isNaN(diff)) return "";
+    if (diff < 60) return "agora";
+    if (diff < 3600) return "há " + Math.floor(diff / 60) + " min";
+    if (diff < 86400) return "há " + Math.floor(diff / 3600) + "h";
+    if (diff < 604800) return "há " + Math.floor(diff / 86400) + "d";
+    return d.toLocaleDateString("pt-BR");
+  }
+  function parseNoteKey(key) {
+    if (key.indexOf("ins:") === 0) return { kind: "insight", epId: null, sec: null };
+    var i = key.lastIndexOf(":");
+    if (i === -1) return { kind: "general", epId: key, sec: null };
+    return { kind: "topic", epId: key.slice(0, i), sec: key.slice(i + 1) };
+  }
+  function noteContext(key) {
+    var p = parseNoteKey(key), n = state.notes[key] || {};
+    if (p.kind === "insight")
+      return { kind: "insight", studyTitle: "Anotação avulsa", studyId: null, data: "", tema: (n.tag || ""), contextTxt: "", chapter: "", t: "", exists: true };
+    var ep = epMap[p.epId];
+    if (!ep)
+      return { kind: p.kind, studyTitle: "Estudo removido", studyId: p.epId, data: "", tema: "", contextTxt: "", chapter: "", t: "", exists: false };
+    if (p.kind === "general")
+      return { kind: "general", studyTitle: ep.titulo, studyId: ep.id, data: ep.data, tema: "📝 Notas gerais", contextTxt: "", chapter: "", t: "", exists: true, ep: ep };
+    var tp = null;
+    (ep.topicos || []).forEach(function (x, idx) {
+      if (tp) return;
+      if (String(x.sec) === String(p.sec)) tp = x;
+      else if (p.sec === ("i" + idx)) tp = x;
+    });
+    return { kind: "topic", studyTitle: ep.titulo, studyId: ep.id, data: ep.data,
+             tema: (tp && tp.tag) || "", contextTxt: (tp && tp.txt) || "", chapter: (tp && tp.cap) || "", t: (tp && tp.t) || "", exists: true, ep: ep };
+  }
+  function notesList() {
+    var arr = [];
+    Object.keys(state.notes || {}).forEach(function (key) {
+      var n = state.notes[key];
+      if (!n) return;
+      var hasText = n.text && String(n.text).trim();
+      if (!hasText && !n._new) return;                 // ignora vazias (menos a recem-criada)
+      arr.push({ key: key, note: n, ctx: noteContext(key) });
+    });
+    arr.sort(function (a, b) {
+      var ta = a.note.up || a.note.at || "", tb = b.note.up || b.note.at || "";
+      return String(tb).localeCompare(String(ta));      // mais recente primeiro
+    });
+    return arr;
+  }
+  // sem nenhum filtro ativo? (Tudo, sem tema, sem estudo, sem busca)
+  function anotaUnfiltered() {
+    return anotaState.filter === "todos" && !anotaState.tema && anotaState.estudo === "all" && !anotaState.q;
+  }
+  function anotaPass(r) {
+    var f = anotaState.filter;
+    if (f === "insight" && !r.note.star) return false;
+    if (f === "avulsa" && r.ctx.kind !== "insight") return false;
+    if (anotaState.tema && (r.ctx.tema || "") !== anotaState.tema) return false;
+    if (anotaState.estudo !== "all" && (r.ctx.studyId || "__ins") !== anotaState.estudo) return false;
+    if (anotaState.q) {
+      var h = ((r.note.text || "") + " " + (r.ctx.contextTxt || "") + " " + (r.ctx.studyTitle || "") + " " + (r.ctx.tema || "")).toLowerCase();
+      if (h.indexOf(anotaState.q) === -1) return false;
+    }
+    return true;
+  }
+  function renderAnotaChips() {
+    var box = $("anotaChips");
+    [].slice.call(box.querySelectorAll(".chip[data-tema]")).forEach(function (c) { c.remove(); });
+    var seen = {}, order = [];
+    notesList().forEach(function (r) { var t = r.ctx.tema; if (t && !seen[t]) { seen[t] = 1; order.push(t); } });
+    order.forEach(function (t) {
+      var b = document.createElement("button");
+      b.className = "chip tema" + (anotaState.tema === t ? " on" : "");
+      b.setAttribute("data-tema", t); b.textContent = t;
+      box.appendChild(b);
+    });
+    [].forEach.call(box.querySelectorAll(".chip[data-af]"), function (c) { c.classList.toggle("on", c.dataset.af === anotaState.filter); });
+  }
+  function renderAnotaEstudoSelect() {
+    var sel = $("anotaEstudo");
+    var eps = (ESTUDOS.episodios || []).slice().sort(function (a, b) { return (b.data || "").localeCompare(a.data || ""); });
+    var opts = ['<option value="all">Todos os estudos</option>'];
+    eps.forEach(function (e) { opts.push('<option value="' + esc(e.id) + '">' + esc(trunc(e.titulo, 42)) + '</option>'); });
+    sel.innerHTML = opts.join("");
+    sel.value = anotaState.estudo;
+    if (sel.value !== anotaState.estudo) { anotaState.estudo = "all"; sel.value = "all"; }  // estudo sumiu
+  }
+  function anotaCard(r) {
+    var ctx = r.ctx, n = r.note, isIns = ctx.kind === "insight";
+    var d = document.createElement("div");
+    d.className = "anota-card" + (n.star ? " star" : "") + (ctx.exists ? "" : " orphan");
+    d.dataset.key = r.key;
+    var dm = "";
+    if (ctx.data) { var pd = String(ctx.data).split("-"); dm = pd.length === 3 ? pd[2] + "/" + pd[1] : ctx.data; }
+
+    var temaHtml = isIns
+      ? '<input class="ac-temainput" placeholder="tema (opcional)" value="' + esc(n.tag || "") + '">'
+      : (ctx.tema ? '<span class="ac-tema">' + esc(ctx.tema) + '</span>' : '');
+    var studyHtml = isIns
+      ? '<span class="ac-study avulsa">✎ Avulsa</span>'
+      : '<span class="ac-study">' + esc(ctx.studyTitle) + (dm ? ' · ' + esc(dm) : '') + '</span>';
+
+    var goBtn = (!isIns && ctx.exists) ? '<button class="ac-go" title="Abrir no estudo">ir ao estudo ↗</button>' : '';
+    var ctxHtml = '';
+    if (!isIns) {
+      if (ctx.contextTxt)
+        ctxHtml = '<div class="ac-ctx"><span class="ac-tt">' + esc(ctx.t || "") + '</span>' +
+                    '<span class="ac-ctxtxt">' + esc(ctx.contextTxt) + '</span>' + goBtn + '</div>';
+      else if (!ctx.exists)
+        ctxHtml = '<div class="ac-ctx orphan-note">Este estudo foi removido, mas sua anotação foi mantida aqui.</div>';
+      else if (goBtn)
+        ctxHtml = '<div class="ac-ctx"><span class="ac-ctxtxt muted">Notas gerais do estudo</span>' + goBtn + '</div>';
+    }
+
+    var whenTxt = (n.star ? "⭐ insight · " : "") + (n.up || n.at ? "editado " + relTime(n.up || n.at) : "");
+    d.innerHTML =
+      '<div class="ac-top">' + temaHtml + studyHtml +
+        '<button class="ac-star" title="' + (n.star ? "Tirar de Insights" : "Marcar como Insight") + '">' + (n.star ? "★" : "☆") + '</button>' +
+      '</div>' + ctxHtml +
+      '<textarea class="ac-note" placeholder="Sua anotação…">' + esc(n.text || "") + '</textarea>' +
+      '<div class="ac-foot"><span class="ac-when">' + esc(whenTxt) + '</span>' +
+        '<button class="ac-del" title="Excluir anotação">🗑</button></div>';
+    wireAnotaCard(d, r);
+    return d;
+  }
+  function wireAnotaCard(d, r) {
+    var key = r.key;
+    var ta = d.querySelector(".ac-note"), star = d.querySelector(".ac-star"),
+        del = d.querySelector(".ac-del"), go = d.querySelector(".ac-go"),
+        temaInput = d.querySelector(".ac-temainput"), when = d.querySelector(".ac-when");
+    var tmr = null;
+    ta.addEventListener("input", function () {
+      clearTimeout(tmr);
+      tmr = setTimeout(function () {
+        var v = ta.value.trim();
+        if (!v) { delete state.notes[key]; persistNote(key); d.classList.add("removing"); setTimeout(renderAnotacoes, 200); return; }
+        state.notes[key] = state.notes[key] || {};
+        state.notes[key].text = v; state.notes[key].up = new Date().toISOString();
+        delete state.notes[key]._new;
+        persistNote(key);
+        d.classList.add("saved"); setTimeout(function () { d.classList.remove("saved"); }, 900);
+        if (when) when.textContent = (state.notes[key].star ? "⭐ insight · " : "") + "editado agora";
+      }, 650);
+    });
+    star.onclick = function () {
+      state.notes[key] = state.notes[key] || {};
+      state.notes[key].star = !state.notes[key].star;
+      persistNote(key);
+      var on = !!state.notes[key].star;
+      d.classList.toggle("star", on);
+      star.textContent = on ? "★" : "☆";
+      star.title = on ? "Tirar de Insights" : "Marcar como Insight";
+      if (when) when.textContent = (on ? "⭐ insight · " : "") + "editado " + relTime(state.notes[key].up || state.notes[key].at);
+      if (anotaState.filter === "insight" && !on) { d.classList.add("removing"); setTimeout(renderAnotacoes, 200); }
+    };
+    del.onclick = function () { delete state.notes[key]; persistNote(key); d.classList.add("removing"); setTimeout(renderAnotacoes, 200); };
+    if (go) go.onclick = function () { goToStudyNote(key); };
+    if (temaInput) {
+      var t2 = null;
+      temaInput.addEventListener("input", function () {
+        clearTimeout(t2);
+        t2 = setTimeout(function () {
+          state.notes[key] = state.notes[key] || {};
+          state.notes[key].tag = temaInput.value.trim();
+          if (state.notes[key].text && String(state.notes[key].text).trim()) persistNote(key);
+          renderAnotaChips();
+        }, 650);
+      });
+    }
+  }
+  function goToStudyNote(key) {
+    var ctx = noteContext(key);
+    if (!ctx.exists || !ctx.ep) { toast("Estudo não encontrado"); return; }
+    setMode("estudo");
+    openReader(ctx.ep);
+    setTimeout(function () {
+      if (ctx.kind === "general") {
+        var g = document.querySelector("#rd-generalnote");
+        if (g) { g.scrollIntoView({ behavior: "smooth", block: "center" }); try { g.focus(); } catch (e) {} }
+        return;
+      }
+      var li = document.querySelector('#estudoReader .bl[data-pkey="' + key + '"]');
+      if (li) {
+        var t = li.querySelector(".bl-note"), b = li.querySelector(".bl-note-btn");
+        if (t) t.classList.add("show"); if (b) b.classList.add("has");
+        li.scrollIntoView({ behavior: "smooth", block: "center" });
+        li.classList.add("bl-flash"); setTimeout(function () { li.classList.remove("bl-flash"); }, 1600);
+      }
+    }, 140);
+  }
+  function novaAnotacao() {
+    var key = "ins:" + Date.now();
+    var iso = new Date().toISOString();
+    state.notes[key] = { text: "", star: false, tag: "", at: iso, up: iso, _new: true };
+    anotaState.filter = "todos"; anotaState.tema = null; anotaState.estudo = "all";
+    $("anotaBusca").value = ""; anotaState.q = "";
+    renderAnotacoes();
+    setTimeout(function () {
+      var card = document.querySelector('.anota-card[data-key="' + key + '"]');
+      if (card) { card.scrollIntoView({ behavior: "smooth", block: "center" }); var ta = card.querySelector(".ac-note"); if (ta) ta.focus(); }
+    }, 60);
+  }
+  function renderAnotacoes() {
+    renderAnotaEstudoSelect();
+    renderAnotaChips();
+    var feed = $("anotaFeed"); feed.innerHTML = "";
+    var all = notesList(), rows = all.filter(anotaPass);
+    // sem filtro: fixa os insights ⭐ no topo (sort estavel mantem a recencia dentro de cada grupo)
+    if (anotaUnfiltered()) rows.sort(function (a, b) { return (b.note.star ? 1 : 0) - (a.note.star ? 1 : 0); });
+    var real = all.filter(function (r) { return !(r.note._new && !(r.note.text && String(r.note.text).trim())); }).length;
+    var stars = all.filter(function (r) { return r.note.star; }).length;
+    $("anotaSub").textContent = real
+      ? (real + (real === 1 ? " anotação" : " anotações") + (stars ? " · " + stars + " insight" + (stars === 1 ? "" : "s") + " ⭐" : "") + " · edite, marque os insights e filtre por tema.")
+      : "Ainda não há anotações. Anote nos estudos do podcast que elas aparecem aqui, ou crie uma avulsa.";
+    if (!rows.length) {
+      feed.innerHTML = '<div class="empty"><b>Nada neste filtro.</b>' +
+        (real ? "Troque o filtro, o tema ou a busca acima." : "Suas anotações dos estudos aparecem aqui automaticamente.") + '</div>';
+      return;
+    }
+    rows.forEach(function (r) { feed.appendChild(anotaCard(r)); });
+  }
+
   /* ---------- modo ---------- */
   function setMode(m) {
     appMode = m;
     $("radarView").style.display = (m === "radar") ? "" : "none";
     $("estudoView").style.display = (m === "estudo") ? "" : "none";
+    $("anotacoesView").style.display = (m === "anotacoes") ? "" : "none";
     $("actionbar").style.display = (m === "radar") ? "" : "none";
     var stog = $("side-toggle"); if (stog) stog.style.display = (m === "radar") ? "" : "none";
     [].forEach.call(document.querySelectorAll(".mode-btn"), function (b) { b.classList.toggle("on", b.dataset.mode === m); });
     if (m === "estudo") renderEstudoGrid();
+    if (m === "anotacoes") renderAnotacoes();
     window.scrollTo(0, 0);
   }
 
@@ -557,19 +797,19 @@
     return { txt: L.join("\n").replace(/\n{3,}/g, "\n\n").trim() + "\n", cap: cap, n: sel.length };
   }
   function materiaURL(id) { return new URL("materias/" + id + ".html", location.href).href; }
+  var LINKS_POR_PARTE = 20; // NotebookLM trava quando cola muitos links de uma vez -> divide em partes
   function gerarLinks() {
-    // Gera os links a partir dos IDs SELECIONADOS (state.decisions), nao da lista de conteudo.
-    // Assim, se o banco mudar/reduzir (recoleta, poda), o link do que voce marcou NUNCA some:
-    // a materia e sempre materias/<id>.html, so precisa do id.
-    var ids = Object.keys(state.decisions).filter(function (id) {
-      return state.decisions[id] && state.decisions[id].status === "checked";
-    });
-    return { txt: ids.map(materiaURL).join("\n"), n: ids.length };
+    // UM link por assunto marcado (cada pagina de materia vira uma fonte "Web" no NotebookLM).
+    // Como colar dezenas de uma vez estoura o limite do campo, os links saem em PARTES de 20:
+    // copia a Parte 1, adiciona no NotebookLM, depois a Parte 2, e assim por diante.
+    var sel = DADOS.itens.filter(function (it) { return statusOf(it.id) === "checked"; });
+    var urls = sel.map(function (it) { return materiaURL(it.id); });
+    var partes = [];
+    for (var i = 0; i < urls.length; i += LINKS_POR_PARTE) partes.push(urls.slice(i, i + LINKS_POR_PARTE));
+    return { partes: partes, n: urls.length };
   }
   function gerarAudioPrompt() {
     var sel = DADOS.itens.filter(function (it) { return statusOf(it.id) === "checked"; });
-    var cats = (CFG.categorias || []).filter(function (c) { return sel.some(function (it) { return it.cat === c.id; }); });
-    var temas = cats.map(function (c) { return c.emoji + " " + c.nome; }).join(", ");
     var L = [];
     L.push("Este episódio é um resumo de aprendizado para mim, Bruno, dono de uma agência de marketing digital (a MediaGrowth).");
     L.push("");
@@ -579,23 +819,56 @@
     L.push("");
     L.push("Conectem os assuntos entre si quando fizer sentido e priorizem insight acionável no lugar de teoria. Podem ser críticos e dar opinião, não só descrever.");
     L.push("");
-    L.push("Os " + sel.length + " assuntos deste episódio, por tema: " + temas + ".");
-    return { txt: L.join("\n"), n: sel.length };
+    L.push("Abaixo está o roteiro dos " + sel.length + " assuntos deste episódio, organizados por tema. Para cada assunto deixei um resumo do que é, por que importa e a referência de onde ele saiu, pra vocês terem contexto e serem precisos ao falar:");
+    L.push("");
+    (CFG.categorias || []).forEach(function (c) {
+      var arr = sel.filter(function (it) { return it.cat === c.id; });
+      if (!arr.length) return;
+      L.push(c.emoji + " " + c.nome + (c.desc ? " — " + c.desc : ""));
+      arr.forEach(function (it) {
+        var expl = (it.porque || it.resumo || "").replace(/\s+/g, " ").trim();
+        if (expl.length > 240) expl = expl.slice(0, 237).replace(/\s+\S*$/, "") + "...";
+        var ref = it.fonte ? it.fonte : "";
+        if (it.url) ref += (ref ? " — " : "") + it.url;
+        var line = "- " + it.titulo + (expl ? ": " + expl : "");
+        if (ref) line += " (Referência: " + ref + ")";
+        L.push(line);
+      });
+      L.push("");
+    });
+    return { txt: L.join("\n").replace(/\n{3,}/g, "\n\n").trim() + "\n", n: sel.length };
   }
 
   /* ---------- modal ---------- */
   var modalMode = "links";
+  var linkPartes = [];   // [[url,...], [url,...]] — partes de 20 links
+  var linkParte = 0;     // parte visivel no momento
+  function renderPartes() {
+    var el = $("modal-partes"); if (!el) return;
+    if (modalMode !== "links" || linkPartes.length <= 1) { el.style.display = "none"; el.innerHTML = ""; return; }
+    el.style.display = "flex";
+    el.innerHTML = linkPartes.map(function (p, i) {
+      return '<button class="ppart' + (i === linkParte ? " on" : "") + '" data-p="' + i + '">Parte ' + (i + 1) + '</button>';
+    }).join("");
+  }
   function fillModal() {
     var title, hint, txt, saved;
     if (modalMode === "links") {
       var g = gerarLinks();
+      linkPartes = g.partes;
+      if (linkParte >= linkPartes.length) linkParte = 0;
+      var atual = linkPartes[linkParte] || [];
       title = "Links pro NotebookLM";
-      hint = "Cada link abre a NOSSA matéria do assunto (o resumo curado, não a fonte crua). Cole no NotebookLM como fontes: o podcast sai da nossa versão. Um link por linha.";
-      txt = g.txt; saved = g.n + (g.n === 1 ? " link" : " links");
+      hint = "Um link por assunto (cada um vira uma fonte 'Web' no NotebookLM). Como colar muitos de uma vez trava, os links vêm em partes de " + LINKS_POR_PARTE + ": copie a Parte 1, adicione no NotebookLM, depois a Parte 2, e assim por diante.";
+      txt = atual.join("\n");
+      saved = linkPartes.length > 1
+        ? "Parte " + (linkParte + 1) + " de " + linkPartes.length + " · " + atual.length + " links (total " + g.n + ")"
+        : g.n + (g.n === 1 ? " link" : " links");
+      renderPartes();
     } else if (modalMode === "audio") {
       var a = gerarAudioPrompt();
       title = "Personalizar o Resumo em Áudio";
-      hint = "Cole no campo 'Personalizar' do Resumo em Áudio do NotebookLM (define no que os apresentadores focam neste episódio).";
+      hint = "Cole no campo 'Personalizar' do Resumo em Áudio do NotebookLM. Vai com cada tema explicado e as referências usadas, pra dar mais contexto ao áudio que a IA gera.";
       txt = a.txt; saved = a.n + " assuntos";
     } else {
       var t = gerarTexto();
@@ -607,17 +880,20 @@
     $("modal-hint").textContent = hint;
     $("modal-txt").value = txt;
     $("modal-saved").textContent = saved;
+    renderPartes();
     [].forEach.call(document.querySelectorAll(".mtab"), function (x) { x.classList.toggle("on", x.dataset.m === modalMode); });
   }
   function openModal(mode) {
     var n = DADOS.itens.filter(function (it) { return statusOf(it.id) === "checked"; }).length;
     if (!n) { toast("Marque assuntos primeiro ✓"); return; }
-    modalMode = mode || "links"; fillModal(); $("modal").classList.add("on");
+    modalMode = mode || "links"; linkParte = 0; fillModal(); $("modal").classList.add("on");
   }
   function closeModal() { $("modal").classList.remove("on"); }
   function copiar() {
     var ta = $("modal-txt"); ta.select(); ta.setSelectionRange(0, 999999);
-    var msg = modalMode === "links" ? "copiado ✓ · cole os links no NotebookLM"
+    var msg = modalMode === "links" ? (linkPartes.length > 1
+                ? "Parte " + (linkParte + 1) + "/" + linkPartes.length + " copiada ✓ · cole no NotebookLM (fonte Web) e volte pra próxima parte"
+                : "copiado ✓ · cole os links no NotebookLM (fonte Web)")
             : modalMode === "audio" ? "copiado ✓ · cole em Personalizar o Resumo em Áudio"
             : "copiado ✓ · cole no Gemini/NotebookLM";
     var done = function () { $("modal-saved").textContent = msg; toast("Copiado ✓"); };
@@ -648,13 +924,27 @@
     });
     $("busca").addEventListener("input", function (e) { q = e.target.value.trim().toLowerCase(); render(); });
     [].forEach.call(document.querySelectorAll(".mode-btn"), function (b) { b.onclick = function () { setMode(b.dataset.mode); }; });
+    // ---- anotacoes & insights ----
+    $("anotaBusca").addEventListener("input", function (e) { anotaState.q = e.target.value.trim().toLowerCase(); renderAnotacoes(); });
+    $("anotaChips").addEventListener("click", function (e) {
+      var b = e.target.closest(".chip"); if (!b) return;
+      if (b.dataset.af) anotaState.filter = b.dataset.af;
+      else if (b.hasAttribute("data-tema")) anotaState.tema = (anotaState.tema === b.dataset.tema) ? null : b.dataset.tema;
+      renderAnotacoes();
+    });
+    $("anotaEstudo").addEventListener("change", function (e) { anotaState.estudo = e.target.value; renderAnotacoes(); });
+    $("anotaNova").onclick = novaAnotacao;
     $("btn-links").onclick = function () { openModal("links"); };
     $("btn-gerar").onclick = function () { openModal("texto"); };
     $("btn-logout").onclick = function () { apiPost("logout", {}).catch(function () {}).then(function () { location.reload(); }); };
     $("modal-close").onclick = closeModal;
     $("btn-copiar").onclick = copiar;
     $("btn-arquivar").onclick = arquivarSelecionados;
-    [].forEach.call(document.querySelectorAll(".mtab"), function (t) { t.onclick = function () { modalMode = t.dataset.m; fillModal(); }; });
+    $("modal-partes").addEventListener("click", function (e) {
+      var b = e.target.closest(".ppart"); if (!b) return;
+      linkParte = parseInt(b.dataset.p, 10) || 0; fillModal();
+    });
+    [].forEach.call(document.querySelectorAll(".mtab"), function (t) { t.onclick = function () { modalMode = t.dataset.m; linkParte = 0; fillModal(); }; });
     $("modal").addEventListener("click", function (e) { if (e.target.id === "modal") closeModal(); });
     $("side-toggle").onclick = openSide;
     $("side-close").onclick = closeSide;
@@ -681,14 +971,15 @@
           });
         } catch (e) {}
         persistLocal();
-        catMap = {}; grpMap = {};
+        catMap = {}; grpMap = {}; epMap = {};
         (CFG.categorias || []).forEach(function (c) { catMap[c.id] = c; });
         (CFG.grupos || []).forEach(function (g) { grpMap[g.id] = g; });
+        (ESTUDOS.episodios || []).forEach(function (e) { epMap[e.id] = e; });
         if (CFG.subtitulo) $("subtitle").textContent = CFG.subtitulo;
         wire();
         render();
         var m = params.get("m") || params.get("modo");
-        setMode(m === "estudo" ? "estudo" : "radar");
+        setMode(m === "estudo" ? "estudo" : (m === "anotacoes" || m === "anotacao" ? "anotacoes" : "radar"));
       })
       .catch(function (e) {
         if (e && e.auth === false) return;

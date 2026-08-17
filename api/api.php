@@ -238,11 +238,23 @@ if (in_array($action, ['mark', 'bulk', 'note', 'progress'], true)) {
   }
 
   if ($action === 'note') {
-    $key  = clip($_POST['key'] ?? '', 80);
+    // nota de estudo (por topico/ep) OU anotacao avulsa (key "ins:<ts>").
+    // aceita star (insight validado) e tag (tema livre, usado nas avulsas). Preserva o "at" de criacao.
+    $key  = clip($_POST['key'] ?? '', 120);
     $text = clip($_POST['text'] ?? '', 20000);
+    $star = (($_POST['star'] ?? '') === '1');
+    $tag  = clip($_POST['tag'] ?? '', 160);
     if ($key === '') $abort('key vazia');
-    if ($text === '') unset($st['notes'][$key]);
-    else $st['notes'][$key] = ['text' => $text, 'at' => date('c')];
+    if ($text === '') { unset($st['notes'][$key]); }   // sem texto = nota removida
+    else {
+      $prev = (isset($st['notes'][$key]) && is_array($st['notes'][$key])) ? $st['notes'][$key] : [];
+      $n = ['text' => $text];
+      $n['at'] = isset($prev['at']) ? $prev['at'] : date('c');   // criacao preservada
+      $n['up'] = date('c');                                      // ultima edicao
+      if ($star)      $n['star'] = true;
+      if ($tag !== '') $n['tag'] = $tag;
+      $st['notes'][$key] = $n;
+    }
     $commit();
   }
 

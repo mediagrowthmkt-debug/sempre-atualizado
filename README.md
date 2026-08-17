@@ -18,7 +18,7 @@ Segurança (checklist do Bruno): sessão em cookie HttpOnly (1.4), segredo/dados
 - `categorias.json` — a lista fixa de assuntos (grupos, emoji, descrição, queries de busca).
 - `engine.py` — motor stdlib (Mac e VPS): `coletar` · `add` · `gerar-texto` · `materias` · `estudo` · `publicar` · `deploy-frontend` · `push-content` · `backend` · `setup` · `set-senha` · `status` · `link`.
 - `dados/bruno.json` + `dados/estudos.json` — banco acumulado (**gitignore**; sobem só pro dir privado da Hostinger).
-- `index.html` + `style.css` + `app.js` + `config.js` — frontend (tema preto+dourado, login, radar, estudo).
+- `index.html` + `style.css` + `app.js` + `config.js` — frontend (tema preto+dourado, login, radar, estudo, anotações & insights).
 - `api/api.php` + `api/_ratelimit.php` — backend na Hostinger. `api/secret.php.example` = template do segredo.
 
 ## Setup (uma vez)
@@ -39,6 +39,16 @@ python3 engine.py publicar                    # sobe pagina + conteudo
 Manda o áudio (Resumo em Áudio do NotebookLM) → transcreve (Whisper) → o agente monta os tópicos com timestamp → `engine.py estudo --audio ... --file ... --titulo "Título PT" --publicar`. Cada áudio vira **um estudo novo** (agrupados por dia no grid). O reader toca o áudio com **barra de progresso**, o **tópico atual acende** conforme anda, e dá pra **anotar por tópico** (nota escondida até você escrever).
 
 **Ao enviar áudio pra criar o estudo, os SELECIONADOS viram JA USADO automaticamente.** Como aquele áudio foi gerado a partir dos assuntos que o Bruno marcou (selecionados → texto → NotebookLM → áudio), esses assuntos já foram consumidos. Então o `estudo --audio ...` move todo item com status `checked` (selecionado) pra `read` (já usado/arquivado) no estado do backend, **limpando o contador de SELECIONADOS pra não poluir**. Preserva notas e progresso. Pra rodar avulso: `engine.py arquivar-selecionados`.
+
+## Anotações & Insights (3ª aba)
+Aba que **agrega TODAS as anotações** feitas nos estudos do podcast (nota por tópico + notas gerais do estudo) num lugar só, pra organizar. Cada anotação vira um **card editável** (salva na hora, sincronizado com o reader do estudo — é a mesma nota, uma fonte de verdade só), mostrando o contexto (tema, estudo, data e o trecho do tópico) e um botão **"ir ao estudo ↗"** que abre o reader já naquele tópico. Recursos:
+- **Ordem** por mais recente (última edição no topo).
+- **Busca** livre no texto das anotações + contexto.
+- **Filtros:** chips `Tudo` / `⭐ Insights` / `✎ Avulsas` + **chips de tema** (gerados dos temas das notas) + **select por estudo**.
+- **⭐ Insight:** marca a anotação como insight validado (star) → filtro `⭐ Insights` mostra só esses. É a forma de "validar" no estudo o que vira insight.
+- **+ Nova anotação:** cria uma anotação **avulsa** (não amarrada a tópico), com um campo de **tema livre** que também alimenta os chips.
+
+Backend: reusa o mesmo store `state.notes` (chave `<epId>:<sec>` = tópico · `<epId>` = geral · `ins:<ts>` = avulsa). O `action=note` guarda `text` + `star` + `tag`, preservando o `at` de criação e gravando `up` (última edição). Filtro/agregação são 100% no frontend a partir do `state.notes` + `estudos.json`.
 
 ## Estados de um item
 `pending` (novo) · `checked` (selecionado pro texto) · `read` (arquivado/já li). Chaveado por **ID estável do item** → o que o Bruno marca sobrevive à recoleta.
